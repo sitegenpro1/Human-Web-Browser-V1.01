@@ -1,0 +1,35 @@
+# Exclude everything outside artifacts/mobile from EAS archive
+# (patterns are relative to git root)
+
+# Other monorepo packages — not needed for mobile build
+lib/
+artifacts/api-server/
+artifacts/mockup-sandbox/
+scripts/
+
+# Root config & tooling files
+package.json
+pnpm-lock.yaml
+pnpm-workspace.yaml
+tsconfig.base.json
+tsconfig.json
+replit.md
+replit.nix
+
+# Attached user assets & generated APKs
+attached_assets/
+*.apk
+*.apk.gz
+
+# Agent internals
+.local/
+.agents/
+
+# Node modules (already gitignored but be explicit)
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+build/
+.expo/

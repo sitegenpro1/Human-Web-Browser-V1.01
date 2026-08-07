@@ -1,0 +1,100 @@
+Starting project at C:\Users\Admin\Downloads\browser.apk-clean\browser.apk-clean
+Metro is running in CI mode, reloads are disabled. Remove CI=true to enable watch mode.
+Starting Metro Bundler
+Waiting on http://localhost:8082
+Logs for your project will appear below.
+Android node_modules\.pnpm\expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb\node_modules\expo\AppEntry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android node_modules\.pnpm\expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb\node_modules\expo\AppEntry.js ░░░░░░░░░░░░░░░░  1.0% (1/1)
+Android Bundling failed 4408ms node_modules\.pnpm\expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb\node_modules\expo\AppEntry.js (1 module)
+Unable to resolve "../../App" from "node_modules\.pnpm\expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb\node_modules\expo\AppEntry.js"
+[0m [90m 1 |[39m [36mimport[39m registerRootComponent [36mfrom[39m [32m'expo/src/launch/registerRootComponent'[39m[33m;[39m
+ [90m 2 |[39m
+[31m[1m>[22m[39m[90m 3 |[39m [36mimport[39m [33mApp[39m [36mfrom[39m [32m'../../App'[39m[33m;[39m
+ [90m   |[39m                  [31m[1m^[22m[39m
+ [90m 4 |[39m
+ [90m 5 |[39m registerRootComponent([33mApp[39m)[33m;[39m
+ [90m 6 |[39m[0m
+
+Import stack:
+
+ node_modules\.pnpm\expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb\node_modules\expo\AppEntry.js
+ | import "../../App"
+
+ 
+ | import "./node_modules/.pnpm/expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb/node_modules/expo/AppEntry"
+
+Web node_modules\.pnpm\expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb\node_modules\expo\AppEntry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundling failed 33ms node_modules\.pnpm\expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb\node_modules\expo\AppEntry.js (1 module)
+Unable to resolve "../../App" from "node_modules\.pnpm\expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb\node_modules\expo\AppEntry.js"
+[0m [90m 1 |[39m [36mimport[39m registerRootComponent [36mfrom[39m [32m'expo/src/launch/registerRootComponent'[39m[33m;[39m
+ [90m 2 |[39m
+[31m[1m>[22m[39m[90m 3 |[39m [36mimport[39m [33mApp[39m [36mfrom[39m [32m'../../App'[39m[33m;[39m
+ [90m   |[39m                  [31m[1m^[22m[39m
+ [90m 4 |[39m
+ [90m 5 |[39m registerRootComponent([33mApp[39m)[33m;[39m
+ [90m 6 |[39m[0m
+
+Import stack:
+
+ node_modules\.pnpm\expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb\node_modules\expo\AppEntry.js
+ | import "../../App"
+
+ 
+ | import "./node_modules/.pnpm/expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb/node_modules/expo/AppEntry"
+
+Web Bundling failed 15ms node_modules\.pnpm\expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb\node_modules\expo\AppEntry.js (1 module)
+Unable to resolve "../../App" from "node_modules\.pnpm\expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb\node_modules\expo\AppEntry.js"
+[0m [90m 1 |[39m [36mimport[39m registerRootComponent [36mfrom[39m [32m'expo/src/launch/registerRootComponent'[39m[33m;[39m
+ [90m 2 |[39m
+[31m[1m>[22m[39m[90m 3 |[39m [36mimport[39m [33mApp[39m [36mfrom[39m [32m'../../App'[39m[33m;[39m
+ [90m   |[39m                  [31m[1m^[22m[39m
+ [90m 4 |[39m
+ [90m 5 |[39m registerRootComponent([33mApp[39m)[33m;[39m
+ [90m 6 |[39m[0m
+
+Import stack:
+
+ node_modules\.pnpm\expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb\node_modules\expo\AppEntry.js
+ | import "../../App"
+
+ 
+ | import "./node_modules/.pnpm/expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb/node_modules/expo/AppEntry"
+
+Web node_modules\.pnpm\expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb\node_modules\expo\AppEntry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundling failed 20ms node_modules\.pnpm\expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb\node_modules\expo\AppEntry.js (1 module)
+Unable to resolve "../../App" from "node_modules\.pnpm\expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb\node_modules\expo\AppEntry.js"
+[0m [90m 1 |[39m [36mimport[39m registerRootComponent [36mfrom[39m [32m'expo/src/launch/registerRootComponent'[39m[33m;[39m
+ [90m 2 |[39m
+[31m[1m>[22m[39m[90m 3 |[39m [36mimport[39m [33mApp[39m [36mfrom[39m [32m'../../App'[39m[33m;[39m
+ [90m   |[39m                  [31m[1m^[22m[39m
+ [90m 4 |[39m
+ [90m 5 |[39m registerRootComponent([33mApp[39m)[33m;[39m
+ [90m 6 |[39m[0m
+
+Import stack:
+
+ node_modules\.pnpm\expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb\node_modules\expo\AppEntry.js
+ | import "../../App"
+
+ 
+ | import "./node_modules/.pnpm/expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb/node_modules/expo/AppEntry"
+
+Android node_modules\.pnpm\expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb\node_modules\expo\AppEntry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundling failed 15ms node_modules\.pnpm\expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb\node_modules\expo\AppEntry.js (1 module)
+Unable to resolve "../../App" from "node_modules\.pnpm\expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb\node_modules\expo\AppEntry.js"
+[0m [90m 1 |[39m [36mimport[39m registerRootComponent [36mfrom[39m [32m'expo/src/launch/registerRootComponent'[39m[33m;[39m
+ [90m 2 |[39m
+[31m[1m>[22m[39m[90m 3 |[39m [36mimport[39m [33mApp[39m [36mfrom[39m [32m'../../App'[39m[33m;[39m
+ [90m   |[39m                  [31m[1m^[22m[39m
+ [90m 4 |[39m
+ [90m 5 |[39m registerRootComponent([33mApp[39m)[33m;[39m
+ [90m 6 |[39m[0m
+
+Import stack:
+
+ node_modules\.pnpm\expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb\node_modules\expo\AppEntry.js
+ | import "../../App"
+
+ 
+ | import "./node_modules/.pnpm/expo@54.0.34_@babel+core@7._f23cb90fe1ef6f3d1d617dd26c9311bb/node_modules/expo/AppEntry"
+

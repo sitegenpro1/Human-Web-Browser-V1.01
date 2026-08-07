@@ -1,0 +1,13 @@
+uploads = []
+
+[[generated]]
+id = "56cUbKUzQD8JRWi9poGkx"
+uri = "file://artifacts/mobile/assets/images/icon.png"
+type = "image"
+title = "human web browser app icon"
+
+[[outputs]]
+id = "oHIDc0klX7WfbpgY5pKKU"
+uri = "file://HumanWebBrowser.apk.gz"
+type = "unspecified"
+title = "Human Web Browser APK (v1.0.0) — extract and install on Android"

@@ -1,0 +1,124 @@
+Do not rewrite the working WebView browser engine. Freeze the current WebView architecture.
+
+Now improve Human Web Browser with serious browser features and premium hand-crafted design.
+
+Add these features:
+
+1. Tabs system:
+- create new tab
+- close tab
+- switch tabs
+- show tab count
+- each tab keeps its own URL and title
+
+2. Bookmarks:
+- save current page
+- bookmarks list
+- delete bookmark
+- search bookmarks
+
+3. History:
+- save visited pages unless Private Mode is ON
+- show history grouped by date
+- clear history
+
+4. Private Mode:
+- toggle private mode
+- do not save history in private mode
+- show private mode indicator
+- add “Clear private session” button
+
+5. Find in Page:
+- search text inside current WebView page using injected JavaScript
+- next/previous match controls
+- fail safely if not supported
+
+6. Reader Mode:
+- add button to enter clean reading mode
+- inject safe CSS/JS to simplify article pages best-effort
+- font size controls
+- exit reader mode button
+- never crash if reader mode fails
+
+7. Page Actions:
+- copy current URL
+- share current URL
+- open externally
+- reload
+- stop loading
+- home
+
+8. Per-site Control Panel:
+For current domain show:
+- Trust this site
+- Block this site
+- Report this site
+- Clear warning
+- Open externally
+- Copy URL
+
+9. Domain Safety:
+Before page load:
+- reject dangerous schemes: javascript:, data:, file:, intent:
+- check local blocklist
+- check trusted list
+- check seeded reputation
+- show full-screen warning for blocked domains
+- show top warning banner for risky domains
+
+10. Search enhancements:
+Add search chips:
+- Official
+- Forums
+- Reddit
+- Docs
+- Academic
+- News
+- Before AI-era
+These should modify the Google query text safely and still use udm=14.
+
+11. Research Tray:
+Allow user to save current page as a source with:
+- title
+- URL
+- domain
+- note
+- tag: useful, suspicious, official, forum, article
+Store locally.
+
+12. Dashboard:
+Show local stats:
+- AI overviews hidden
+- risky domains warned
+- reports submitted
+- blocked domains
+- trusted domains
+- saved sources
+
+Design improvements:
+- Make the app feel like a premium privacy browser, not a generic AI-generated React app.
+- Dark matte theme.
+- Compact toolbar.
+- Bottom controls must be thumb-friendly.
+- Use polished cards, subtle borders, proper spacing, and native mobile feel.
+- No loud gradients.
+- No generic AI icons.
+- Add micro-interactions and loading states.
+- Add beautiful empty states.
+- Add friendly error pages.
+- Make responsiveness perfect for 360px mobile width, tablets, and desktop/web preview shell.
+- Web preview should stay honest: it can show the UI shell, but real WebView browsing is Android-only.
+
+Reliability:
+- TypeScript clean.
+- No iframe.
+- No architecture rewrite.
+- All storage wrapped in try/catch.
+- Use safe fallback if storage fails.
+- All injected JavaScript wrapped in try/catch.
+- No crash on bad URLs.
+- No crash on malformed imported data.
+- No crash if WebView injection fails.
+- Keep Google udm=14 enforcement.
+- Keep AI Overview hiding.
+- Keep Android Expo Go working.

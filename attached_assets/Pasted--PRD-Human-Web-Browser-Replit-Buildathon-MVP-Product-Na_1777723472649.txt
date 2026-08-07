@@ -1,0 +1,904 @@
+# PRD: Human Web Browser — Replit Buildathon MVP
+
+**Product Name:** Human Web Browser  
+**Build Target:** Replit 24-hour Buildathon MVP  
+**Platform:** Mobile-first PWA / Website  
+**Tech Stack:** React + TypeScript + Vite  
+**Backend:** None for MVP, local-first only  
+**Paid APIs:** Not allowed  
+**Search Engine:** Google by default using Web Mode parameter `udm=14`  
+**Core Promise:** Search Google without AI clutter, track AI-slop reports, and warn users about community-reported low-quality domains.
+
+---
+
+## 1. One-Line Product Pitch
+
+Human Web Browser is a mobile-first AI-free search launcher that opens Google in Web Mode by default, lets users report AI-slop websites, and shows community-style reputation warnings for suspicious domains.
+
+---
+
+## 2. Replit Buildathon Goal
+
+Build a polished, demo-ready web app on Replit that proves the idea without needing paid APIs, custom search engines, big hosting, scraping, or complex backend infrastructure.
+
+The MVP should be:
+
+- Easy for Replit Agent to build.
+- Reliable and hard to crash.
+- Mobile-first.
+- Installable as a PWA.
+- Local-first.
+- Demo-ready within 24 hours.
+- Expandable later into Android app / APK.
+
+---
+
+## 3. What This MVP Will Do
+
+### 3.1 Main Capabilities
+
+1. User searches from Human Web Browser.
+2. App opens Google search with `udm=14` to prefer classic Web results.
+3. User can check a website/domain reputation.
+4. User can report websites as AI-slop, SEO spam, fake support, scam, misleading, or low quality.
+5. App stores reports locally.
+6. App combines local reports with seeded demo community data.
+7. App shows domain risk tier:
+   - Clean
+   - Watch
+   - Warn
+   - Hide in Strict Mode
+   - Block in Strict Mode
+8. User can create personal blocklist and trustlist.
+9. User can export/import settings and reports as JSON.
+10. App includes a demo page showing the full product story.
+11. App includes a waitlist/pricing page for future monetization.
+
+---
+
+## 4. What This MVP Will NOT Do
+
+The Replit MVP must avoid risky or unreliable features.
+
+Do **not** build:
+
+- A custom search engine.
+- Google scraping.
+- AI detection using paid APIs.
+- AI-generated content classifier.
+- Real-time filtering inside Google results page.
+- Chrome extension.
+- Android APK inside this MVP.
+- User accounts.
+- Payments.
+- Heavy backend.
+- Browser automation.
+
+Reason: these are too slow, brittle, expensive, or risky for a 24-hour Replit build.
+
+---
+
+## 5. Key Technical Constraint
+
+A normal website cannot reliably edit or remove content inside `google.com` after redirecting the user, because Google is a different origin.
+
+Therefore, the Replit MVP should behave as:
+
+**AI-free search launcher + domain reputation system + community report prototype**
+
+not as a full browser that modifies Google result pages.
+
+---
+
+## 6. User Personas
+
+### 6.1 AI-Skeptical Search User
+
+Wants normal search results, not AI summaries.
+
+Needs:
+- Simple search bar.
+- Google Web Mode by default.
+- Clean mobile UI.
+
+### 6.2 Student
+
+Wants real sources for homework/research.
+
+Needs:
+- Source-first browsing.
+- Warnings for low-quality generated pages.
+- Personal trusted domains.
+
+### 6.3 Parent / Elder User
+
+May be vulnerable to scam support numbers or misleading advice.
+
+Needs:
+- Fake support/scam reporting.
+- Clear warnings.
+- Strict Mode.
+
+### 6.4 Researcher / Journalist
+
+Wants original sources and fewer machine-written pages.
+
+Needs:
+- Domain checking.
+- Trustlist.
+- Exportable reports/settings.
+
+---
+
+## 7. Product Screens
+
+### 7.1 Home / Search Page
+
+Purpose:
+Main entry point.
+
+Required UI:
+- App logo/name: Human Web Browser
+- Headline: “Search the human web.”
+- Subheading: “No AI Overviews. Fewer AI-slop results. More source-first browsing.”
+- Large search bar.
+- Search button.
+- Search mode selector:
+  - Google Web Mode
+  - Google Normal
+  - DuckDuckGo
+  - Brave Search
+- Quick buttons:
+  - Check Website
+  - Report AI Slop
+  - Demo Mode
+- Small counter:
+  - “X domains warned”
+  - “Y reports stored locally”
+
+Behavior:
+- If input is plain text, open selected search engine.
+- If input is URL, open the URL directly.
+- Default mode must be Google Web Mode.
+- Google Web Mode URL format:
+  `https://www.google.com/search?q=<encoded_query>&udm=14`
+
+Validation:
+- Empty input should show inline error.
+- Very long input should be safely trimmed or rejected with a friendly message.
+- Malformed URLs must not crash the app.
+
+---
+
+### 7.2 Domain Reputation Checker
+
+Purpose:
+Let users check whether a website has been reported.
+
+Required UI:
+- URL/domain input.
+- “Check Domain” button.
+- Result card showing:
+  - Normalized domain
+  - Risk tier
+  - Risk score
+  - Total reports
+  - Unique reporter estimate
+  - Report category breakdown
+  - Suggested action
+- Buttons:
+  - Report this domain
+  - Add to blocklist
+  - Add to trustlist
+
+Risk tiers:
+- Clean
+- Watch
+- Warn
+- Hide in Strict Mode
+- Block in Strict Mode
+
+Example copy:
+- “Community reports suggest this domain may contain AI-like or low-quality content.”
+- “This is not a verified accusation. Treat it as a warning signal.”
+
+---
+
+### 7.3 Report Domain Page
+
+Purpose:
+Allow users to report suspicious domains.
+
+Required fields:
+- URL/domain
+- Category
+- Optional note
+
+Categories:
+1. AI-slop / AI-like content
+2. Fake support number
+3. SEO spam
+4. Misleading medical/finance/legal info
+5. Scam or phishing suspicion
+6. Low-quality generated page
+7. Other
+
+Rules:
+- Normalize domain before storing.
+- Do not require login.
+- Store report locally.
+- Prevent duplicate rapid reports.
+- Max 3 local reports per domain per day.
+- Max 25 total local reports per day.
+- Show success message after submit.
+
+Important wording:
+Use “community-reported” and “AI-like” instead of “confirmed AI.”
+
+---
+
+### 7.4 Personal Blocklist / Trustlist Page
+
+Purpose:
+Let users control their own browsing preferences.
+
+Required UI:
+- Blocked domains list.
+- Trusted domains list.
+- Add domain form.
+- Remove button for each item.
+- Export JSON button.
+- Import JSON button.
+
+Rules:
+- Trustlist overrides community warning visually.
+- Blocklist always shows strong warning.
+- Imported JSON must be validated.
+- Bad JSON must show error without crashing.
+
+---
+
+### 7.5 Settings Page
+
+Required settings:
+- Default search engine:
+  - Google Web Mode
+  - Google Normal
+  - DuckDuckGo
+  - Brave Search
+- Strict Mode ON/OFF
+- Open searches in:
+  - Same tab
+  - New tab
+- Local demo data ON/OFF
+- Theme:
+  - Dark
+  - Light
+  - System
+- Reset local data button
+
+Rules:
+- Settings stored locally.
+- If localStorage fails, app should use in-memory fallback.
+- Reset button must ask for confirmation.
+
+---
+
+### 7.6 Demo Page
+
+Purpose:
+Win judges by making the idea obvious.
+
+Required demo sections:
+
+1. Problem:
+   - “AI summaries and generated pages are taking over search.”
+2. Search Demo:
+   - Show normal search vs Human Web search.
+   - Human Web opens Google with `udm=14`.
+3. Report Demo:
+   - Show user reporting a suspicious domain.
+4. Reputation Demo:
+   - Show seeded domain with report breakdown.
+5. Strict Mode Demo:
+   - Show how strict mode warns/hides heavily reported domains.
+6. Monetization Preview:
+   - Free plan and Pro/Family plans.
+
+Use seeded fake/demo domains only:
+- ai-content-farm.example
+- fake-airline-support.example
+- seo-slop-blog.example
+- auto-health-advice.example
+- coupon-spam-example.test
+
+Do not include real accusations against real domains in seeded data.
+
+---
+
+### 7.7 Waitlist / Pricing Page
+
+Purpose:
+Show business potential.
+
+Required UI:
+- Email input.
+- Join waitlist button.
+- Store emails locally for MVP.
+- Pricing cards:
+  - Free
+  - Pro
+  - Family
+
+Plans:
+
+Free:
+- Google Web Mode
+- Basic reports
+- Local blocklist
+- Domain checker
+
+Pro:
+- Synced blocklists
+- Advanced filters
+- Research Mode
+- Export history
+
+Family:
+- Elder Safety Mode
+- Family profiles
+- Stronger scam warnings
+- Shared blocklists
+
+No real payment integration in MVP.
+
+---
+
+### 7.8 About / Manifesto Page
+
+Purpose:
+Explain the product philosophy.
+
+Required copy points:
+- We are not anti-technology.
+- We believe users deserve choice.
+- We do not claim perfect AI detection.
+- We avoid scraping.
+- We use community reports and personal controls.
+- We keep MVP local-first and privacy-conscious.
+
+---
+
+## 8. Data Models
+
+### 8.1 Report
+
+```ts
+type ReportCategory =
+  | "ai_slop"
+  | "fake_support"
+  | "seo_spam"
+  | "misleading_info"
+  | "scam_phishing"
+  | "low_quality_generated"
+  | "other";
+
+type Report = {
+  id: string;
+  domain: string;
+  inputUrl: string;
+  category: ReportCategory;
+  note?: string;
+  createdAt: string;
+  reporterLocalId: string;
+};
+```
+
+---
+
+### 8.2 Domain Reputation
+
+```ts
+type DomainRiskTier =
+  | "clean"
+  | "watch"
+  | "warn"
+  | "hide_strict"
+  | "block_strict";
+
+type DomainReputation = {
+  domain: string;
+  totalReports: number;
+  uniqueReporterEstimate: number;
+  riskScore: number;
+  tier: DomainRiskTier;
+  categoryCounts: Record<ReportCategory, number>;
+  lastReportedAt?: string;
+};
+```
+
+---
+
+### 8.3 User Settings
+
+```ts
+type SearchEngine =
+  | "google_web"
+  | "google_normal"
+  | "duckduckgo"
+  | "brave";
+
+type ThemeMode = "dark" | "light" | "system";
+
+type UserSettings = {
+  defaultSearchEngine: SearchEngine;
+  strictMode: boolean;
+  openInNewTab: boolean;
+  demoDataEnabled: boolean;
+  theme: ThemeMode;
+};
+```
+
+---
+
+### 8.4 Local Lists
+
+```ts
+type LocalLists = {
+  blockedDomains: string[];
+  trustedDomains: string[];
+};
+```
+
+---
+
+## 9. Risk Score Logic
+
+Risk score must be deterministic and local.
+
+### 9.1 Basic Formula
+
+```ts
+riskScore = Math.min(1,
+  totalReports * 0.03 +
+  aiSlopReports * 0.02 +
+  scamReports * 0.06 +
+  fakeSupportReports * 0.05 +
+  misleadingReports * 0.04
+);
+```
+
+### 9.2 Tier Rules
+
+```ts
+if riskScore >= 0.80 or totalReports >= 75:
+  tier = "block_strict"
+
+else if riskScore >= 0.60 or totalReports >= 25:
+  tier = "hide_strict"
+
+else if riskScore >= 0.35 or totalReports >= 10:
+  tier = "warn"
+
+else if totalReports >= 3:
+  tier = "watch"
+
+else:
+  tier = "clean"
+```
+
+### 9.3 UI Copy by Tier
+
+Clean:
+- “No meaningful reports found.”
+
+Watch:
+- “A few users have reported this domain. Review carefully.”
+
+Warn:
+- “This domain has multiple community reports. Be careful.”
+
+Hide in Strict Mode:
+- “Strict Mode would hide this domain by default.”
+
+Block in Strict Mode:
+- “Strict Mode would block this domain unless you choose to open it.”
+
+---
+
+## 10. Local Storage Keys
+
+Use these exact keys:
+
+```txt
+hwb_settings_v1
+hwb_reports_v1
+hwb_blocked_domains_v1
+hwb_trusted_domains_v1
+hwb_waitlist_v1
+hwb_local_report_limits_v1
+hwb_reporter_id_v1
+```
+
+Storage rules:
+- Wrap every localStorage call in try/catch.
+- If localStorage fails, use memory fallback.
+- Never let storage errors crash UI.
+- Validate parsed JSON before use.
+- If old/corrupt data exists, ignore it and show a small warning.
+
+---
+
+## 11. Domain Normalization Rules
+
+Function name:
+`normalizeDomain(input: string): string | null`
+
+Requirements:
+- Accept full URLs.
+- Accept bare domains.
+- Accept copied URLs with spaces.
+- Lowercase domain.
+- Remove protocol.
+- Remove `www.`
+- Remove path/query/hash.
+- Reject empty input.
+- Reject invalid strings.
+- Do not crash on malformed input.
+
+Examples:
+- `https://www.Example.com/path?a=1` → `example.com`
+- `example.com/blog` → `example.com`
+- `   HTTPS://WWW.TEST.COM   ` → `test.com`
+- `not a url ???` → `null`
+
+---
+
+## 12. Search URL Builder
+
+Function name:
+`buildSearchUrl(input: string, engine: SearchEngine): string`
+
+Behavior:
+- If input is detected as URL:
+  - Return normalized/openable URL with `https://` added if missing.
+- If input is search text:
+  - Use selected engine.
+
+Search formats:
+```ts
+google_web:
+  https://www.google.com/search?q=<encoded_query>&udm=14
+
+google_normal:
+  https://www.google.com/search?q=<encoded_query>
+
+duckduckgo:
+  https://duckduckgo.com/?q=<encoded_query>
+
+brave:
+  https://search.brave.com/search?q=<encoded_query>
+```
+
+Safety:
+- Encode query.
+- Do not use dangerouslySetInnerHTML.
+- Never execute user input.
+- Reject javascript: URLs.
+- Reject data: URLs.
+- Reject file: URLs.
+
+---
+
+## 13. Reliability Requirements
+
+### 13.1 App Must Not Crash On
+
+- Empty search.
+- Bad URL.
+- Huge input.
+- Bad imported JSON.
+- Missing localStorage.
+- Corrupt localStorage.
+- Missing seeded data.
+- Unknown report category.
+- Browser popup blocked.
+- Offline mode.
+- Component error.
+
+### 13.2 Required Safety Components
+
+1. `ErrorBoundary`
+2. `safeStorage` utility
+3. `normalizeDomain` utility
+4. `buildSearchUrl` utility
+5. `validateImportData` utility
+6. Empty state components
+7. Toast/alert component
+8. Global fallback page
+
+---
+
+## 14. Suggested File Structure
+
+```txt
+human-web-browser/
+  public/
+    manifest.json
+    icon-192.png
+    icon-512.png
+    offline.html
+    seed-reputation.json
+
+  src/
+    app/
+      App.tsx
+      routes.tsx
+
+    components/
+      BottomNav.tsx
+      SearchBar.tsx
+      RiskBadge.tsx
+      ReputationCard.tsx
+      ReportForm.tsx
+      SettingsPanel.tsx
+      ErrorBoundary.tsx
+      EmptyState.tsx
+      Toast.tsx
+
+    pages/
+      HomePage.tsx
+      CheckDomainPage.tsx
+      ReportPage.tsx
+      ListsPage.tsx
+      SettingsPage.tsx
+      DemoPage.tsx
+      WaitlistPage.tsx
+      AboutPage.tsx
+
+    lib/
+      normalizeDomain.ts
+      buildSearchUrl.ts
+      riskScore.ts
+      safeStorage.ts
+      exportImport.ts
+      reportLimits.ts
+      seedData.ts
+
+    types/
+      index.ts
+
+    styles/
+      global.css
+
+    main.tsx
+```
+
+---
+
+## 15. UI Design Requirements
+
+Style:
+- Mobile-first.
+- Dark mode default.
+- Clean cards.
+- Large search input.
+- Bottom nav.
+- Soft rounded corners.
+- Clear risk colors.
+
+Suggested palette:
+- Background: near-black
+- Cards: dark gray
+- Text: white/off-white
+- Clean: green
+- Watch: blue/gray
+- Warn: yellow
+- Strict/Block: red
+- Accent: electric blue or purple
+
+Responsive:
+- Must look good on 360px mobile width.
+- Desktop should center content with max width around 900px.
+
+---
+
+## 16. Buildathon Success Criteria
+
+The build is successful if:
+
+1. App loads on Replit.
+2. Home search works.
+3. Default search opens Google with `udm=14`.
+4. Domain checker works.
+5. Report form works.
+6. Reports persist after refresh.
+7. Risk score updates.
+8. Personal blocklist/trustlist works.
+9. Settings persist.
+10. Demo page tells the story clearly.
+11. Waitlist mock works.
+12. PWA manifest exists.
+13. No obvious crashes during demo.
+14. README explains the idea.
+15. UI feels polished.
+
+---
+
+## 17. Replit Agent Master Prompt
+
+Paste this into Replit Agent:
+
+```txt
+Build a polished, production-quality mobile-first PWA called “Human Web Browser” for a 24-hour Replit buildathon.
+
+Use React + TypeScript + Vite. Do not use paid APIs, AI APIs, search APIs, scraping, user accounts, or backend services. The MVP must be fully local-first using localStorage with safe fallback.
+
+Product:
+Human Web Browser is an AI-free search launcher and community domain reputation prototype. It opens Google in Web Mode by default using:
+https://www.google.com/search?q=<encoded_query>&udm=14
+
+It lets users report suspicious websites as AI-slop, fake support, SEO spam, misleading info, scam/phishing, low-quality generated page, or other. It computes a local risk score and shows domain reputation tiers.
+
+Required pages:
+1. Home/Search
+2. Check Domain
+3. Report Domain
+4. Blocklist/Trustlist
+5. Settings
+6. Demo
+7. Waitlist/Pricing
+8. About/Manifesto
+
+Required behavior:
+- Default search engine: Google Web Mode.
+- Search input detects URL vs search query.
+- Plain text opens selected search engine.
+- URL opens directly with https added if missing.
+- Reject javascript:, data:, and file: URLs.
+- Report form stores reports locally.
+- Domain checker combines local reports with seeded demo reputation data.
+- Show risk tiers: Clean, Watch, Warn, Hide in Strict Mode, Block in Strict Mode.
+- Include personal blocklist and trustlist.
+- Include import/export JSON for settings/lists/reports.
+- Include settings for default engine, strict mode, open in new tab, demo data, and theme.
+- Include a demo page with fake .example domains only.
+- Include waitlist mock that stores emails locally.
+- Include PWA manifest, offline fallback, and installable behavior.
+- Include README explaining product, setup, and demo script.
+
+Reliability:
+- TypeScript strict.
+- Add ErrorBoundary.
+- Every localStorage access must be wrapped in try/catch.
+- If localStorage fails, use in-memory fallback.
+- Validate imported JSON.
+- Do not crash on malformed URLs or bad input.
+- Do not use dangerouslySetInnerHTML.
+- Do not execute user input.
+- Add empty states and error states.
+- Keep code modular and maintainable.
+
+Design:
+- Dark mode first.
+- Mobile-first.
+- Bottom navigation.
+- Large search bar.
+- Clean cards.
+- Green/yellow/red risk badges.
+- Make it look like a serious privacy/search product, not a toy.
+
+Seed demo domains:
+- ai-content-farm.example
+- fake-airline-support.example
+- seo-slop-blog.example
+- auto-health-advice.example
+- coupon-spam-example.test
+
+Do not accuse real domains. Use wording like “community-reported,” “AI-like,” and “low-quality risk,” not “confirmed AI.”
+
+Deliver a complete working Replit app.
+```
+
+---
+
+## 18. Replit Agent Follow-Up Prompt for Polish
+
+Use after first build:
+
+```txt
+Polish the Human Web Browser app.
+
+Fix any TypeScript errors, improve mobile responsiveness, add missing empty/error states, verify localStorage fallback, and make the demo flow impressive for judges.
+
+Test these cases:
+- Empty search
+- Normal search query
+- URL input
+- URL without protocol
+- javascript: URL rejection
+- Bad imported JSON
+- Duplicate reports
+- LocalStorage unavailable fallback
+- Strict Mode ON/OFF
+- Theme switching
+- Export/import JSON
+
+Improve the README with:
+- Product pitch
+- Problem
+- Solution
+- How to run
+- Buildathon demo script
+- Future roadmap
+```
+
+---
+
+## 19. README Requirements
+
+README must include:
+
+1. Product name.
+2. One-line pitch.
+3. Problem.
+4. Solution.
+5. Features.
+6. Tech stack.
+7. How to run on Replit.
+8. How Google Web Mode works.
+9. Why no scraping is used.
+10. Demo script.
+11. Future roadmap.
+12. Monetization idea.
+
+---
+
+## 20. 60-Second Demo Script
+
+```txt
+This is Human Web Browser — a search launcher for people who want the human web back.
+
+Instead of building another search engine, we use Google by default but open it in Web Mode, so users get source-first results without AI clutter.
+
+Users can also report suspicious AI-slop, fake support, SEO spam, or scam-like websites.
+
+The app builds a local and community-style reputation score. In Strict Mode, heavily reported domains are warned or blocked.
+
+The MVP is local-first, free to run, does not use paid APIs, does not scrape Google, and is ready to expand into an Android browser app later.
+```
+
+---
+
+## 21. Future Roadmap After Replit MVP
+
+Do not build these during the Replit MVP, but mention them in README:
+
+1. Android WebView APK.
+2. Browser extension.
+3. Cloudflare Worker + D1 backend.
+4. Synced blocklists.
+5. Family profiles.
+6. Elder Safety Mode.
+7. Research Mode.
+8. Public community reputation API.
+9. Pro plan.
+10. School/library version.
+
+---
+
+## 22. Final Build Decision
+
+For Replit, build **only the PWA/site MVP**.
+
+Why:
+- Fastest to ship.
+- No paid APIs.
+- No app store.
+- No Android build complexity.
+- Best for buildathon demo.
+- Easy to share with judges.
+- Same UI can later be reused inside Android app.
+
+Main demo claim:
+**“We are not replacing Google. We are giving users a human-web control layer over search.”**

@@ -1,0 +1,89 @@
+Stop building this as a normal website/PWA browser. I want a real mobile browser app, not a search launcher.
+
+The current iframe approach is wrong because google.com cannot be embedded inside a normal website. Remove iframe-based browser preview.
+
+Convert/build this as a mobile app with an in-app WebView browser.
+
+Preferred stack:
+Use React Native + Expo if Replit supports it, with react-native-webview.
+If React Native is not supported in this workspace, create a separate Android Kotlin WebView project.
+
+Core product:
+Human Web Browser is an Android browser app that opens Google inside the app using WebView, forces Google Web Mode with udm=14, and tries to hide AI Overview/AI Mode elements after page load.
+
+Must-have browser features:
+1. Address/search bar at top.
+2. Back button.
+3. Forward button.
+4. Reload/stop button.
+5. Home button.
+6. Tabs are optional for MVP; single tab is enough.
+7. Bottom nav or compact toolbar.
+8. Current URL display.
+9. Loading progress bar.
+10. Error screen instead of blank crash page.
+
+Search behavior:
+- If user types a search query, load:
+  https://www.google.com/search?q=<encoded_query>&udm=14
+- If user types a URL, load it directly with https:// added if missing.
+- If WebView navigates to google.com/search and udm=14 is missing, intercept and reload with udm=14.
+- Never use iframe.
+
+AI hiding behavior:
+- After Google search page finishes loading, inject safe JavaScript/CSS into the WebView.
+- Try to hide elements containing labels like:
+  AI Overview
+  AI Mode
+  Generative AI
+- Also include a maintainable selector list for known Google AI blocks.
+- All injected JavaScript must be wrapped in try/catch.
+- If hiding fails, do not crash. Show a small toast: “Web Mode active. AI hiding fallback failed.”
+
+Domain reputation features:
+- Keep the existing report system.
+- Keep local AI-slop/scam reports.
+- Keep personal blocklist and trustlist.
+- Before loading a page, extract root domain.
+- If domain is blocked locally, show warning screen:
+  “This domain is in your blocklist.”
+  Buttons:
+  - Go back
+  - Open anyway
+  - Trust domain
+- If domain has community/demo reports, show a warning banner in the browser.
+
+Security:
+- Reject javascript:, data:, file:, intent:, and unknown dangerous schemes.
+- Do not inject scripts into login/payment/banking pages.
+- Do not use dangerouslySetInnerHTML.
+- Validate all URLs.
+- WebView must not crash on bad URLs.
+- If Google shows CAPTCHA or blocks WebView behavior, app should continue working and show the page/error normally.
+
+Storage:
+- Use AsyncStorage/local storage for:
+  - settings
+  - reports
+  - blocklist
+  - trustlist
+  - strict mode
+  - default search engine
+- If storage fails, use in-memory fallback.
+
+UI:
+Dark mode first.
+Make it look like a real browser, not a search app.
+Header:
+- URL/search bar
+- Go button
+Browser area:
+- WebView full screen
+Footer:
+- back, forward, home, report, settings
+
+Deliver:
+- Working mobile app code.
+- README explaining how to run/build APK.
+- Do not claim iframe support.
+- Do not make this only a search launcher.
