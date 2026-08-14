@@ -34,6 +34,7 @@ type Props = {
   onPullGesture?: (type: string, dy: number) => void;
   onPopupBlocked?: () => void;
   onDownloadRequest?: (url: string, filename: string) => void;
+  onContextRequest?: (info: { kind: "link" | "image"; url: string }) => void;
   onPermissionRequest?: (req: {
     origin: string;
     resources: string[];

@@ -783,15 +783,22 @@ export default function BrowserScreen() {
     incrementAiHiddenCount,
   } = useApp();
   const { tabs, activeTab, createTab, updateTab } = useTabs();
+  // Id of the tab that owns the currently mounted BrowserView. Captured per
+  // render so async WebView events can only ever mutate this tab.
+  const browserTabId = activeTab.id;
   const { addBookmark, removeBookmarkByUrl, isBookmarked } = useBookmarks();
   const { addHistoryEntry, isPrivateMode, pendingNavUrl, setPendingNavUrl } = useHistory();
   const { addSource } = useResearch();
 
   // ─ browser state ─
   const [activeUrl, setActiveUrl] = useState(activeTab?.url || "");
-  const [loadKey, setLoadKey] = useState(0);
   const [addressInput, setAddressInput] = useState("");
   const [isEditingAddress, setIsEditingAddress] = useState(false);
+  const isEditingAddressRef = useRef(false);
+  const setEditingAddress = useCallback((next: boolean) => {
+    isEditingAddressRef.current = next;
+    setIsEditingAddress(next);
+  }, []);
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [canGoBack, setCanGoBack] = useState(false);
@@ -810,6 +817,9 @@ export default function BrowserScreen() {
   // ─ text selection state ─
   const [selectedText, setSelectedText] = useState("");
   const [showSelectionSheet, setShowSelectionSheet] = useState(false);
+
+  // ─ link/image long-press context state ─
+  const [contextInfo, setContextInfo] = useState<{ kind: "link" | "image"; url: string } | null>(null);
 
   // ─ pull to refresh state ─
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -839,6 +849,7 @@ export default function BrowserScreen() {
   const prevTabIdRef = useRef(activeTab.id);
   // ─ derived ─
   const isHome = !activeUrl;
+  const isPrivateSession = activeTab.isPrivate || isPrivateMode;
   const isHttps = activeUrl.startsWith("https");
   const currentDomain = useMemo(
     () => (activeUrl ? (normalizeDomain(activeUrl) ?? "") : ""),
@@ -864,7 +875,7 @@ export default function BrowserScreen() {
       const url = activeTab.url || "";
       setActiveUrl(url);
       setAddressInput(url ? getDisplayUrl(url) : "");
-      setIsEditingAddress(false);
+      setEditingAddress(false);
       setWarningDismissed(false);
       setForceLoad(false);
       setShowFindBar(false);
@@ -877,7 +888,6 @@ export default function BrowserScreen() {
       setIsRefreshing(false);
       if (pullHoldTimer.current) { clearTimeout(pullHoldTimer.current); pullHoldTimer.current = null; }
       Animated.spring(pullProgress, { toValue: 0, useNativeDriver: true, friction: 8 }).start();
-      if (url) setLoadKey((k) => k + 1);
     }
   }, [activeTab.id]);
 
@@ -936,7 +946,7 @@ export default function BrowserScreen() {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       if (showSheet) { setShowSheet(false); return true; }
       if (showFindBar) { setShowFindBar(false); return true; }
-      if (isEditingAddress) { setIsEditingAddress(false); setAddressInput(activeUrl ? getDisplayUrl(activeUrl) : ""); return true; }
+      if (isEditingAddress) { setEditingAddress(false); setAddressInput(activeUrl ? getDisplayUrl(activeUrl) : ""); return true; }
       if (canGoBack) { browserRef.current?.goBack(); return true; }
       if (!isHome) { goHome(); return true; }
       return false;
@@ -959,16 +969,16 @@ export default function BrowserScreen() {
       }
       setActiveUrl(url);
       setAddressInput(getDisplayUrl(url));
-      setIsEditingAddress(false);
+      setEditingAddress(false);
       setWarningDismissed(false);
       setForceLoad(false);
       setIsReaderMode(false);
-      setLoadKey((k) => k + 1);
+      if (url === activeUrl) browserRef.current?.reload();
       updateTab(activeTab.id, { url });
       Keyboard.dismiss();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     },
-    [activeChip, selectedEngine, activeTab.id, updateTab]
+    [activeChip, selectedEngine, activeTab.id, activeUrl, updateTab]
   );
 
   // ─ navigate from history ─
@@ -984,7 +994,7 @@ export default function BrowserScreen() {
   function goHome() {
     setActiveUrl("");
     setAddressInput("");
-    setIsEditingAddress(false);
+    setEditingAddress(false);
     setWarningDismissed(false);
     setForceLoad(false);
     setCanGoBack(false);
@@ -996,16 +1006,16 @@ export default function BrowserScreen() {
   }
 
 function handleUrlChange(url: string) {
-    if (__DEV__) console.log('[NAV] handleUrlChange:', url, 'loadKey:', loadKey);
+    if (__DEV__) console.log('[NAV] handleUrlChange:', url);
     setActiveUrl(url);
-    if (!isEditingAddress) setAddressInput(getDisplayUrl(url));
-    updateTab(activeTab.id, { url });
+    if (!isEditingAddressRef.current) setAddressInput(getDisplayUrl(url));
+    updateTab(browserTabId, { url });
   }
 
   function handleTitleChange(title: string) {
     if (title) {
-      updateTab(activeTab.id, { title });
-      if (activeUrl) addHistoryEntry(activeUrl, title);
+      updateTab(browserTabId, { title });
+      if (activeUrl && !isPrivateSession) addHistoryEntry(activeUrl, title);
     }
   }
 
@@ -1016,8 +1026,8 @@ function handleNavigationRequest(url: string) {
       return;
     }
     setActiveUrl(url);
-    setAddressInput(getDisplayUrl(url));
-    updateTab(activeTab.id, { url });
+    if (!isEditingAddressRef.current) setAddressInput(getDisplayUrl(url));
+    updateTab(browserTabId, { url });
   }
 
   const PULL_THRESHOLD = 72;
@@ -1127,6 +1137,49 @@ function handleNavigationRequest(url: string) {
       setShowSelectionSheet(false);
       setSelectedText("");
     }
+  }
+
+  // long-press on a link/image opens the context sheet
+  function handleContextRequest(info: { kind: "link" | "image"; url: string }) {
+    if (!info.url) return;
+    setContextInfo({ kind: info.kind, url: info.url });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }
+
+  function handleContextOpen() {
+    if (!contextInfo) return;
+    const url = contextInfo.url.trim();
+    setContextInfo(null);
+    navigate(url);
+  }
+
+  function handleContextOpenNewTab() {
+    if (!contextInfo) return;
+    const url = contextInfo.url.trim();
+    setContextInfo(null);
+    createTab(url);
+  }
+
+  function handleContextCopy() {
+    if (!contextInfo) return;
+    Clipboard.setStringAsync(contextInfo.url).catch(() => {});
+    setContextInfo(null);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }
+
+  function handleContextShare() {
+    if (!contextInfo) return;
+    const url = contextInfo.url;
+    setContextInfo(null);
+    Share.share({ url, message: url }).catch(() => {});
+  }
+
+  function handleContextDownload() {
+    if (!contextInfo || contextInfo.kind !== "image") return;
+    const url = contextInfo.url;
+    const filename = url.split("/").pop()?.split("?")[0] || "image.jpg";
+    setContextInfo(null);
+    handleDownloadRequest(url, filename);
   }
 
   function toggleDarkMode() {
@@ -1276,7 +1329,7 @@ function handleNavigationRequest(url: string) {
     <View style={[styles.root, { backgroundColor: colors.background, paddingTop: topPad }]}>
 
       {/* ── Private mode banner ── */}
-      {isPrivateMode && (
+      {isPrivateSession && (
         <View style={[styles.privateBanner, { backgroundColor: colors.primary + "18" }]}>
           <Feather name="eye-off" size={11} color={colors.primary} />
           <Text style={[styles.privateBannerText, { color: colors.primary }]}>
@@ -1324,7 +1377,7 @@ function handleNavigationRequest(url: string) {
           style={[styles.addressBar, { backgroundColor: colors.addressBar }]}
           onPress={() => {
             if (!isEditingAddress) {
-              setIsEditingAddress(true);
+              setEditingAddress(true);
               setAddressInput(getCleanEditUrl(activeUrl || ""));
               setTimeout(() => addressRef.current?.focus(), 40);
             }
@@ -1343,15 +1396,17 @@ function handleNavigationRequest(url: string) {
             style={[styles.addressInput, { color: colors.foreground }]}
             value={isEditingAddress ? addressInput : activeUrl ? getDisplayUrl(activeUrl) : ""}
             onChangeText={setAddressInput}
-            onFocus={() => { setIsEditingAddress(true); setAddressInput(getCleanEditUrl(activeUrl || "")); }}
-            onBlur={() => { setIsEditingAddress(false); setAddressInput(activeUrl ? getDisplayUrl(activeUrl) : ""); }}
+            onFocus={() => {
+              if (!isEditingAddress) setEditingAddress(true);
+            }}
+            onBlur={() => { setEditingAddress(false); }}
             onSubmitEditing={() => navigate(addressInput)}
             placeholder="Search or enter address"
             placeholderTextColor={colors.mutedForeground}
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="go"
-            keyboardType="url"
+            keyboardType="default"
             selectTextOnFocus
           />
           {isEditingAddress && addressInput.length > 0 && (
@@ -1551,9 +1606,9 @@ function handleNavigationRequest(url: string) {
             </View>
           </Animated.View>
           <BrowserView
-            key={`${activeTab.id}-${loadKey}`}
+            key={browserTabId}
             ref={browserRef}
-            url={activeUrl}
+            url={activeTab.url || ""}
             forceDarkMode={isDarkMode}
             onUrlChange={handleUrlChange}
             onTitleChange={handleTitleChange}
@@ -1568,6 +1623,7 @@ function handleNavigationRequest(url: string) {
             onPullGesture={handlePullGesture}
             onPopupBlocked={handlePopupBlocked}
             onDownloadRequest={handleDownloadRequest}
+            onContextRequest={handleContextRequest}
             onPermissionRequest={handlePermissionRequest}
             popupBlockEnabled={safetySettings.popupBlockEnabled}
             firewallCheck={firewallEnabled ? firewallShouldBlock : undefined}
@@ -1676,6 +1732,21 @@ function handleNavigationRequest(url: string) {
         />
       )}
 
+      {/* ── Link/image long-press context sheet ── */}
+      {contextInfo && (
+        <ContextSheet
+          info={contextInfo}
+          colors={colors}
+          insets={insets}
+          onClose={() => setContextInfo(null)}
+          onOpen={handleContextOpen}
+          onOpenNewTab={handleContextOpenNewTab}
+          onCopy={handleContextCopy}
+          onShare={handleContextShare}
+          onDownload={contextInfo.kind === "image" ? handleContextDownload : undefined}
+        />
+      )}
+
       {/* ── Bing warning modal ── */}
       <Modal
         visible={bingWarningUrl !== null}
@@ -1707,12 +1778,12 @@ function handleNavigationRequest(url: string) {
                   setBingWarningUrl(null);
                   setActiveUrl(url);
                   setAddressInput(getDisplayUrl(url));
-                  setIsEditingAddress(false);
+                  setEditingAddress(false);
                   setWarningDismissed(false);
                   setForceLoad(false);
-                   setIsReaderMode(false);
-                   setLoadKey((k) => k + 1);
-                   updateTab(activeTab.id, { url });
+                  setIsReaderMode(false);
+                  if (url === activeUrl) browserRef.current?.reload();
+                  updateTab(activeTab.id, { url });
                   Keyboard.dismiss();
                 }}
               >
@@ -1785,6 +1856,59 @@ function SelectionAction({ icon, label, color, onPress }: { icon: any; label: st
       </View>
       <Text style={[selStyles.actionLabel, { color }]}>{label}</Text>
     </Pressable>
+  );
+}
+
+// ─── Link / Image Long-Press Context Sheet ────────────────────────────────────
+
+function ContextSheet({
+  info,
+  colors,
+  insets,
+  onClose,
+  onOpen,
+  onOpenNewTab,
+  onCopy,
+  onShare,
+  onDownload,
+}: {
+  info: { kind: "link" | "image"; url: string };
+  colors: ColorsType;
+  insets: { bottom: number };
+  onClose: () => void;
+  onOpen: () => void;
+  onOpenNewTab: () => void;
+  onCopy: () => void;
+  onShare: () => void;
+  onDownload?: () => void;
+}) {
+  const preview = info.url.length > 80 ? info.url.slice(0, 80) + "…" : info.url;
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={selStyles.overlay} onPress={onClose}>
+        <Pressable
+          style={[selStyles.sheet, { backgroundColor: colors.card, paddingBottom: insets.bottom + 8 }]}
+          onPress={() => {}}
+        >
+          <View style={[selStyles.handle, { backgroundColor: colors.border }]} />
+          <View style={[selStyles.previewRow, { borderBottomColor: colors.border }]}>
+            <Feather name={info.kind === "image" ? "image" : "link"} size={12} color={colors.mutedForeground} />
+            <Text style={[selStyles.previewText, { color: colors.mutedForeground }]} numberOfLines={2}>
+              {preview}
+            </Text>
+          </View>
+          <View style={selStyles.actions}>
+            <SelectionAction icon="corner-up-right" label="Open" color={colors.primary} onPress={onOpen} />
+            <SelectionAction icon="plus-square" label="New Tab" color={colors.clean} onPress={onOpenNewTab} />
+            {onDownload ? (
+              <SelectionAction icon="download" label="Download" color={colors.watch} onPress={onDownload} />
+            ) : null}
+            <SelectionAction icon="copy" label="Copy" color={colors.foreground} onPress={onCopy} />
+            <SelectionAction icon="share-2" label="Share" color={colors.foreground} onPress={onShare} />
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 

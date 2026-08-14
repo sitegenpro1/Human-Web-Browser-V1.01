@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import React, { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import WebView, { WebViewNavigation } from "react-native-webview";
 
@@ -35,6 +35,7 @@ type Props = {
   onPullGesture?: (type: string, dy: number) => void;
   onPopupBlocked?: () => void;
   onDownloadRequest?: (url: string, filename: string) => void;
+  onContextRequest?: (info: { kind: "link" | "image"; url: string }) => void;
   onPermissionRequest?: (req: {
     origin: string;
     resources: string[];
@@ -185,9 +186,11 @@ const GOOGLE_AI_HIDE_SCRIPT = `
           newParams.push(p);
         }
       }
-      if (!hasUdm14 && !hasExplicitUdm && !hasTbm) {
-        newParams.push('udm=14');
-      }
+      // Only AI Mode (udm=50) is forced to Web mode (udm=14) above.
+      // Explicit verticals (udm=2 Images, other udm values) and true "All"
+      // (no udm / no tbm) are preserved exactly. Do NOT append udm=14 here:
+      // that would rewrite Google's All tab into Web mode and trigger a
+      // client re-render that wipes/intermittently rebuilds the results.
       var newQs = newParams.join('&');
       var newUrl = base + '?' + newQs + (hash ? '#' + hash : '');
       if (newUrl !== u && !window.__hwb_google_replacing) {
@@ -232,7 +235,9 @@ const GOOGLE_AI_HIDE_SCRIPT = `
               newParams.push(params[j]);
             }
           }
-          if (!hasUdm14 && !hasExplicitUdm && !hasTbm) newParams.push('udm=14');
+          // Only AI Mode (udm=50) is forced to Web mode above.
+          // Google's "All" tab (no udm / no tbm) and explicit verticals are
+          // preserved — do NOT append udm=14, or the SPA nav rewrites All into Web.
           var newQs = newParams.join('&');
           return base + '?' + newQs + (hash ? '#' + hash : '');
         } catch(e) { return url; }
@@ -261,25 +266,35 @@ const GOOGLE_AI_HIDE_SCRIPT = `
       (document.head || document.documentElement).appendChild(s);
     }
 
-    // ─── Hide the whole containing result block of an AI element ───
+    // ─── Hide the smallest safe AI Overview container of an AI element ───
     function hideAiBlock(el) {
-      if (!el || !el.style) return;
+      // Recipe: verify connected (a transient/mutating node may not be attached yet)
+      if (!el || !el.style || !el.isConnected) return;
       var cur = el;
       var i = 0;
       while (cur && cur !== document.body && i < 15) {
-        if (cur.id === 'search' || cur.id === 'main') break;
+        if (cur.id === 'search' || cur.id === 'main') break; // boundary: results area
         if (cur.getAttribute) {
           var al = cur.getAttribute('aria-label') || '';
           var ad = cur.getAttribute('data-attrid') || '';
           var ar = cur.getAttribute('data-rl') || '';
-          if (cur.getAttribute('data-hveid') || cur.id === 'm-x-content' || al === 'AI Overview' || ad === 'AI Overview' || ar === 'ai_overview') {
+          var ac = cur.getAttribute('data-async-context') || '';
+          // Hide ONLY at a confirmed AI container, then return immediately.
+          if (cur.id === 'm-x-content' || al === 'AI Overview' || ad === 'AI Overview' || ar === 'ai_overview' || ac.indexOf('ai_overview') !== -1) {
             cur.style.setProperty('display', 'none', 'important');
             return;
           }
+          // data-hveid is stamped on organic/related result cards (and shared
+          // containers during transient DOM states). NEVER hide or climb across
+          // it — that would hide normal All results and cause the incomplete /
+          // "More search results" intermediate state. Treat it as a boundary.
+          if (cur.getAttribute('data-hveid')) break;
         }
         cur = cur.parentElement;
         i++;
       }
+      // No confirmed AI container above: hide only the matched element itself
+      // (the smallest safe container for a direct AI-selector hit).
       el.style.setProperty('display', 'none', 'important');
     }
 
@@ -680,6 +695,8 @@ const POPUP_BLOCK_SCRIPT = `(function(){
 
 // ─── Download link detection script ──────────────────────────────────────────
 // Intercepts clicks on <a download> links and known file-type links.
+// Anchors that are part of media playback UI (inside <video>/<audio>/<picture>)
+// are left alone — intercepting them breaks inline media pages and players.
 const DOWNLOAD_DETECT_SCRIPT = `(function(){
   if(window.__hwb_dl_init)return;
   window.__hwb_dl_init=true;
@@ -689,8 +706,9 @@ const DOWNLOAD_DETECT_SCRIPT = `(function(){
     for(var i=0;i<8&&el;i++){
       if(el.tagName==='A'){
         var href=el.href||'';
-        var dl=el.getAttribute('download')||'';
         if(!href)break;
+        if(el.closest&&el.closest('video,audio,picture'))break;
+        var dl=el.getAttribute('download')||'';
         var lower=href.toLowerCase().split('?')[0];
         if(dl||exts.some(function(x){return lower.endsWith(x);})){
           e.preventDefault();
@@ -702,6 +720,53 @@ const DOWNLOAD_DETECT_SCRIPT = `(function(){
       el=el.parentElement;
     }
   },true);
+})();true;`;
+
+// ─── Long-press context menu script ───────────────────────────────────────────
+// A 500ms hold on a link or image posts {type:'context',kind,url} so the app
+// can show a context menu. Long-press on text is left to the native text
+// selection flow (SelectionSheet). Media elements keep native behavior.
+const LONG_PRESS_SCRIPT = `(function(){
+  if(window.__hwb_lp_init)return;
+  window.__hwb_lp_init=true;
+  var HOLD_MS=500;
+  var t=null,x=0,y=0,active=false;
+  function cancel(){
+    active=false;
+    if(t){clearTimeout(t);t=null;}
+  }
+  document.addEventListener('touchstart',function(e){
+    if(e.touches.length!==1)return;
+    cancel();
+    active=true;
+    var touch=e.touches[0];
+    x=touch.clientX;y=touch.clientY;
+    t=setTimeout(function(){
+      t=null;
+      if(!active)return;
+      active=false;
+      var el=document.elementFromPoint(x,y);
+      for(var i=0;i<8&&el;i++){
+        if(el.tagName==='VIDEO'||el.tagName==='AUDIO'||el.tagName==='CANVAS'||el.tagName==='PICTURE')break;
+        if(el.tagName==='A'||el.tagName==='IMG'){
+          var url=el.tagName==='IMG'?(el.currentSrc||el.src||''):(el.href||'');
+          if(url){
+            try{window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify({type:'context',kind:el.tagName==='IMG'?'image':'link',url:url}));}catch(err){}
+            try{var s=window.getSelection();if(s&&s.removeAllRanges)s.removeAllRanges();}catch(err2){}
+          }
+          break;
+        }
+        el=el.parentElement;
+      }
+    },HOLD_MS);
+  },{passive:true});
+  document.addEventListener('touchmove',function(e){
+    if(!active||e.touches.length!==1)return;
+    var touch=e.touches[0];
+    if(Math.abs(touch.clientX-x)>12||Math.abs(touch.clientY-y)>12)cancel();
+  },{passive:true});
+  document.addEventListener('touchend',cancel);
+  document.addEventListener('touchcancel',cancel);
 })();true;`;
 
 // ─── Download URL helpers ─────────────────────────────────────────────────────
@@ -764,6 +829,7 @@ export const BrowserView = forwardRef<BrowserViewHandle, Props>((props, ref) => 
     onPullGesture,
     onPopupBlocked,
     onDownloadRequest,
+    onContextRequest,
     onPermissionRequest,
     popupBlockEnabled,
     customUserAgent,
@@ -789,8 +855,17 @@ export const BrowserView = forwardRef<BrowserViewHandle, Props>((props, ref) => 
   const [hasError, setHasError] = useState(false);
   const [errorInfo, setErrorInfo] = useState<BrowserError | null>(null);
   const currentUrlRef = useRef(url);
+  const prevSourceUrlRef = useRef(url);
   const forceDarkModeRef = useRef(forceDarkMode);
   forceDarkModeRef.current = forceDarkMode;
+
+  useEffect(() => {
+    if (prevSourceUrlRef.current !== url) {
+      prevSourceUrlRef.current = url;
+      setHasError(false);
+      setErrorInfo(null);
+    }
+  }, [url]);
 
   useImperativeHandle(ref, () => ({
     goBack: () => webViewRef.current?.goBack(),
@@ -847,6 +922,9 @@ export const BrowserView = forwardRef<BrowserViewHandle, Props>((props, ref) => 
     // Download link interception
     webViewRef.current?.injectJavaScript(DOWNLOAD_DETECT_SCRIPT);
 
+    // Long-press context menu (links / images)
+    webViewRef.current?.injectJavaScript(LONG_PRESS_SCRIPT);
+
     // Extension injected scripts (CSS/JS via ExtensionsContext)
     const extraJS = extraInjectedJSRef.current;
     if (extraJS) {
@@ -883,6 +961,9 @@ function handleNavChange(state: WebViewNavigation) {
   function handleMessage(event: any) {
     try {
       const data = JSON.parse(event.nativeEvent.data);
+      if (__DEV__ && ["download", "popup_blocked", "context"].includes(data.type)) {
+        console.log(`[WEBVIEW-MSG] type: ${data.type} url: ${String(data.url ?? "")}`);
+      }
       if (data.type === "ai_hide") {
         onAiHideResult?.(Boolean(data.ok));
       } else if (data.type === "title" && data.title) {
@@ -899,6 +980,9 @@ function handleNavChange(state: WebViewNavigation) {
         const dlUrl = String(data.url ?? "");
         const dlFilename = String(data.filename ?? "");
         if (dlUrl) onDownloadRequest?.(dlUrl, dlFilename);
+      } else if (data.type === "context") {
+        const ctxUrl = String(data.url ?? "");
+        if (ctxUrl) onContextRequest?.({ kind: data.kind === "image" ? "image" : "link", url: ctxUrl });
       }
     } catch {}
   }
@@ -923,18 +1007,10 @@ function handleNavChange(state: WebViewNavigation) {
     }
 
     if (isGoogleSearch(reqUrl)) {
-      // Force Web Mode (udm=14) on Google search URLs with no explicit udm mode.
-      // Explicit vertical modes (udm=2 Images, tbm=...) must be preserved.
-      // This prevents Google's AI Mode and AI Overview from appearing.
-      // The corrected URL is passed to onNavigationRequest which updates
-      // the source prop on the EXISTING WebView (no remount needed).
-      if (!reqUrl.includes("udm=") && !reqUrl.includes("tbm=")) {
-        const sep = reqUrl.includes("?") ? "&" : "?";
-        const corrected = reqUrl + sep + "udm=14";
-        onNavigationRequest?.(corrected);
-        return false;
-      }
       // If AI Mode (udm=50) is present, force Web Mode (udm=14).
+      // Explicit vertical modes (udm=2 Images, tbm=...) and the default
+      // "All" tab (no udm param) must be allowed through — that is how
+      // Google's tab bar behaves in a real browser.
       if (reqUrl.includes("udm=50")) {
         const corrected = reqUrl.replace(/udm=50/g, "udm=14");
         onNavigationRequest?.(corrected);
@@ -947,13 +1023,25 @@ function handleNavChange(state: WebViewNavigation) {
   }
 
   function handleError(event: any) {
+    const code = event.nativeEvent?.code ?? -1;
     const statusCode = event.nativeEvent?.statusCode;
+    const errUrl = event.nativeEvent?.url ?? url;
+    if (__DEV__) {
+      console.log(
+        `[WEBVIEW-ERROR] code: ${code} status: ${statusCode ?? "-"} url: ${errUrl}` +
+          (code === -3 ? " (ERR_ABORTED ignored)" : "")
+      );
+    }
+    if (code === -3) {
+      onLoadEnd?.();
+      return;
+    }
     const err: BrowserError = {
       description:
         event.nativeEvent?.description ??
         (statusCode ? `The page returned HTTP ${statusCode}` : "Failed to load page"),
-      code: event.nativeEvent?.code ?? -1,
-      url: event.nativeEvent?.url ?? url,
+      code,
+      url: errUrl,
     };
     setHasError(true);
     setErrorInfo(err);
@@ -1002,7 +1090,13 @@ function handleNavChange(state: WebViewNavigation) {
       onLoadProgress={({ nativeEvent }) => onLoadProgress?.(nativeEvent.progress)}
       onError={handleError}
       onHttpError={(event) => {
-        if (event.nativeEvent.statusCode >= 400) handleError(event);
+        // HTTP status errors (403/429 challenge pages, consent interstitials,
+        // 404s) are still renderable pages — replacing them with the error
+        // screen destroyed Google anti-bot challenges and consent pages.
+        // The native error UI is reserved for genuine network failures (onError).
+        if (__DEV__) {
+          console.log(`[WEBVIEW-HTTP] status: ${event.nativeEvent.statusCode} url: ${event.nativeEvent.url}`);
+        }
       }}
       onShouldStartLoadWithRequest={handleShouldStartLoad}
       onMessage={handleMessage}
