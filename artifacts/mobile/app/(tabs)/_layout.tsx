@@ -4,10 +4,17 @@ import { Tabs } from "expo-router";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import React from "react";
-import { Platform, StyleSheet, View, useColorScheme } from "react-native";
+import { Platform, StyleSheet, View, useColorScheme, type ColorValue } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
+
+// RN 0.88 widened ColorValue to include `null | number`, while
+// @expo/vector-icons still accepts only `string | OpaqueColorValue`.
+// React Navigation hands tabBarIcon a ColorValue; narrow it for Feather.
+function iconColor(color: ColorValue): string {
+  return typeof color === "string" ? color : (color as unknown as string) ?? "#000";
+}
 
 function NativeTabLayout() {
   return (
@@ -92,7 +99,7 @@ function ClassicTabLayout() {
             isIOS ? (
               <SymbolView name="globe" tintColor={color} size={22} />
             ) : (
-              <Feather name="globe" size={20} color={color} />
+              <Feather name="globe" size={20} color={iconColor(color)} />
             ),
         }}
       />
@@ -104,7 +111,7 @@ function ClassicTabLayout() {
             isIOS ? (
               <SymbolView name="shield" tintColor={color} size={22} />
             ) : (
-              <Feather name="shield" size={20} color={color} />
+              <Feather name="shield" size={20} color={iconColor(color)} />
             ),
         }}
       />
@@ -116,7 +123,7 @@ function ClassicTabLayout() {
             isIOS ? (
               <SymbolView name="flag" tintColor={color} size={22} />
             ) : (
-              <Feather name="flag" size={20} color={color} />
+              <Feather name="flag" size={20} color={iconColor(color)} />
             ),
         }}
       />
@@ -128,7 +135,7 @@ function ClassicTabLayout() {
             isIOS ? (
               <SymbolView name="list.bullet" tintColor={color} size={22} />
             ) : (
-              <Feather name="list" size={20} color={color} />
+              <Feather name="list" size={20} color={iconColor(color)} />
             ),
         }}
       />
@@ -140,7 +147,7 @@ function ClassicTabLayout() {
             isIOS ? (
               <SymbolView name="ellipsis.circle" tintColor={color} size={22} />
             ) : (
-              <Feather name="more-horizontal" size={20} color={color} />
+              <Feather name="more-horizontal" size={20} color={iconColor(color)} />
             ),
         }}
       />

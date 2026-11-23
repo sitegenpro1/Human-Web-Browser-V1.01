@@ -21,6 +21,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import type { TextInputInstance } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BrowserView, type BrowserViewHandle } from "@/components/BrowserView";
@@ -212,7 +213,7 @@ function FindBar({
   onPrev: () => void;
   onClose: () => void;
 }) {
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   return (
@@ -845,7 +846,7 @@ export default function BrowserScreen() {
 
   // ─ refs ─
   const browserRef = useRef<BrowserViewHandle>(null);
-  const addressRef = useRef<TextInput>(null);
+  const addressRef = useRef<TextInputInstance>(null);
   const prevTabIdRef = useRef(activeTab.id);
   // ─ derived ─
   const isHome = !activeUrl;

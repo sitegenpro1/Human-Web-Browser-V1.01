@@ -845,7 +845,10 @@ export const BrowserView = forwardRef<BrowserViewHandle, Props>((props, ref) => 
     onAiHideResult,
   } = props;
 
-  const webViewRef = useRef<WebView>(null);
+  // react-native-webview 14 declares `class WebView<P = undefined>` so the
+  // default props resolve to `WebViewProps & undefined` = never. Supplying the
+  // `{}` type argument restores the v13 default and real prop typing.
+  const webViewRef = useRef<WebView<{}>>(null);
   const popupBlockEnabledRef = useRef(popupBlockEnabled);
   popupBlockEnabledRef.current = popupBlockEnabled;
   const firewallCheckRef = useRef(firewallCheck);
@@ -1074,7 +1077,7 @@ function handleNavChange(state: WebViewNavigation) {
   }
 
   return (
-    <WebView
+    <WebView<{}>
       ref={webViewRef}
       source={{ uri: url }}
       javaScriptEnabled
