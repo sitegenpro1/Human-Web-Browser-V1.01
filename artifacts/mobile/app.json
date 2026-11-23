@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "mobile",
     "userInterfaceStyle": "automatic",
-    "runtimeVersion": "56.0.0",
+    "runtimeVersion": "57.0.0",
     "updates": {
       "url": "https://u.expo.dev/6385b510-7894-4821-a38e-21a352e2ab8a",
       "enabled": true,
