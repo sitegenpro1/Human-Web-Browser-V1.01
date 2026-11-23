@@ -43,6 +43,24 @@ type SafetyContextValue = {
   setPendingPermission: (p: PendingPermission | null) => void;
 };
 
+// RN 0.88 types AppState.currentState as `string | null | undefined`, while
+// the change listener and the comparison below use the narrow AppStateStatus
+// union. Validate at the boundary instead of casting blindly.
+const APP_STATE_VALUES: readonly AppStateStatus[] = [
+  "inactive",
+  "background",
+  "active",
+  "extension",
+  "unknown",
+];
+
+function toAppStateStatus(value: string | null | undefined): AppStateStatus | null | undefined {
+  if (value == null) return value;
+  return (APP_STATE_VALUES as readonly string[]).includes(value)
+    ? (value as AppStateStatus)
+    : undefined;
+}
+
 const SafetyContext = createContext<SafetyContextValue | null>(null);
 
 const SAFETY_KEY = "hwb_safety_v1";
@@ -53,7 +71,9 @@ export function SafetyProvider({ children }: { children: React.ReactNode }) {
   const [popupsBlocked, setPopupsBlocked] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
   const [pendingPermission, setPendingPermission] = useState<PendingPermission | null>(null);
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const appStateRef = useRef<AppStateStatus | null | undefined>(
+    toAppStateStatus(AppState.currentState),
+  );
   const settingsRef = useRef(safetySettings);
   settingsRef.current = safetySettings;
 
