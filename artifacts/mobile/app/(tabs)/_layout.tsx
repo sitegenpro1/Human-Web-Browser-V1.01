@@ -1,7 +1,7 @@
 import { BlurView } from "expo-blur";
 import { Feather } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
-import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
+import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import React from "react";
 import { Platform, StyleSheet, View, useColorScheme } from "react-native";
@@ -13,24 +13,24 @@ function NativeTabLayout() {
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index">
-        <Icon sf={{ default: "globe", selected: "globe.americas.fill" }} />
-        <Label>Browser</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: "globe", selected: "globe.americas.fill" }} />
+        <NativeTabs.Trigger.Label>Browser</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="check">
-        <Icon sf={{ default: "shield", selected: "shield.fill" }} />
-        <Label>Check</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: "shield", selected: "shield.fill" }} />
+        <NativeTabs.Trigger.Label>Check</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="report">
-        <Icon sf={{ default: "flag", selected: "flag.fill" }} />
-        <Label>Report</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: "flag", selected: "flag.fill" }} />
+        <NativeTabs.Trigger.Label>Report</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="lists">
-        <Icon sf={{ default: "list.bullet", selected: "list.bullet" }} />
-        <Label>Lists</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: "list.bullet", selected: "list.bullet" }} />
+        <NativeTabs.Trigger.Label>Lists</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="more">
-        <Icon sf={{ default: "ellipsis.circle", selected: "ellipsis.circle.fill" }} />
-        <Label>More</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: "ellipsis.circle", selected: "ellipsis.circle.fill" }} />
+        <NativeTabs.Trigger.Label>More</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );
