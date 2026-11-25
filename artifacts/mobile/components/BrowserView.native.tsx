@@ -51,6 +51,11 @@ type Props = {
 const BLOCKED_SCHEMES = ["javascript:", "data:", "file:", "intent:", "vbscript:", "blob:"];
 
 // ─── Google AI element selectors ─────────────────────────────────────────────
+// Candidate list, used only for CONFIRMATION by the injected script. It is NOT
+// the stylesheet: the weak obfuscated classes below (.ULSxyf, .I6TXqe, .TQc1id,
+// .M8OgIe, .Kevs9, .LLtSOc, ...) are rotated by Google and are also applied to
+// ordinary result cards, related-search blocks and pagination containers, so the
+// CSS rule set uses HWB_AI_STRONG_SELECTORS instead.
 const GOOGLE_AI_SELECTORS = [
   ".SOVli", ".M8OgIe", ".zxU76d", ".YyVfkd", ".I6TXqe", ".ULSxyf",
   ".Wt6efb", ".sATSHe", ".kHMNrc", ".OJXvsb", ".TQc1id", ".c2xzTb",
@@ -74,19 +79,31 @@ const GOOGLE_AI_SELECTORS = [
   "button[jsname='B6rgad']",
 ].join(",");
 
-// Whole-container rules: remove the ENTIRE block/card (header + content), and the
-// whole AI Mode tab item, so no blank slot or leftover metadata card remains.
+// Positively-identified AI markers only: each carries a semantic attribute that
+// names the AI feature, so hiding a match cannot remove an organic card. This is
+// the ONLY selector set that goes into the stylesheet.
+const HWB_AI_STRONG_SELECTORS = [
+  "#m-x-content",
+  "[data-attrid='AI Overview']",
+  "[aria-label='AI Overview']",
+  "[data-rl='ai_overview']",
+  "[data-async-context*='ai_overview']",
+  "[data-attnms]",
+  "[data-feature-id='GENERATIVE_AI_OVERVIEW']",
+].join(",");
+
+// Whole-container rules: remove an AI-only card (header + content) and the AI
+// Mode tab item.
+//
+// data-hveid is a HARD BOUNDARY. Live Google markup proves why: on multi-result
+// queries (e.g. "pasta recipe") Google wraps the AI Overview AND all organic
+// results in ONE data-hveid container (~3112px, containing 5 organic h3), so
+// "[data-hveid]:has(#m-x-content)" removes the entire results list and leaves
+// only "People also search for" / "More search results". Measured on live
+// Google All: that rule alone drops visible organic results 5 -> 0.
+// No rule here may ever key on a data-hveid element.
 const GOOGLE_AI_BLOCK_RULES = [
-  "[data-hveid]:has(#m-x-content)",
-  "[data-hveid]:has([data-attrid='AI Overview'])",
-  "[data-hveid]:has([aria-label='AI Overview'])",
-  "[data-hveid]:has([data-attnms])",
-  "[data-hveid]:has([data-async-context*='ai_overview'])",
-  "[data-hveid]:has([data-rl='ai_overview'])",
   ".iVzeVc:has([data-attrid='VisualDigestGeneratedDescription'])",
-  "[role='tab']:has(a[href*='udm=50'])",
-  "[role='tab']:has([data-async-type*='ai_mode'])",
-  ".hdtb-mitem:has(a[href*='udm=50'])",
 ].join(",");
 
 // ─── DuckDuckGo AI element selectors ─────────────────────────────────────────
@@ -244,25 +261,31 @@ const GOOGLE_AI_HIDE_SCRIPT = `
       }
       window.history.pushState = function(state, unused, url) {
         if (typeof url === 'string') url = injectUdm14(url);
-        return origPushState.call(this, state, unused, url);
+        var r = origPushState.call(this, state, unused, url);
+        hwbAfterNav();
+        return r;
       };
       window.history.replaceState = function(state, unused, url) {
         if (typeof url === 'string') url = injectUdm14(url);
-        return origReplaceState.call(this, state, unused, url);
+        var r = origReplaceState.call(this, state, unused, url);
+        hwbAfterNav();
+        return r;
       };
       // Override onpopstate for back/forward
       var origOnPopState = window.onpopstate;
       window.onpopstate = function(event) {
-        setTimeout(forceUdm14, 50);
+        setTimeout(function() { forceUdm14(); hwbAfterNav(); }, 50);
         if (origOnPopState) return origOnPopState.apply(this, arguments);
       };
     }
 
     // ─── Strategy 2: CSS hide (backup) ───
+    // Strong AI markers only. Weak obfuscated classes are never in the
+    // stylesheet: they also match organic cards and related-search blocks.
     if (!document.getElementById('hwb-ai-hide')) {
       var s = document.createElement('style');
       s.id = 'hwb-ai-hide';
-      s.textContent = ${JSON.stringify(GOOGLE_AI_SELECTORS + "," + GOOGLE_AI_BLOCK_RULES + "{display:none!important;}")};
+      s.textContent = ${JSON.stringify(HWB_AI_STRONG_SELECTORS + "," + GOOGLE_AI_BLOCK_RULES + "{display:none!important;}")};
       (document.head || document.documentElement).appendChild(s);
     }
 
@@ -293,14 +316,72 @@ const GOOGLE_AI_HIDE_SCRIPT = `
         cur = cur.parentElement;
         i++;
       }
-      // No confirmed AI container above: hide only the matched element itself
-      // (the smallest safe container for a direct AI-selector hit).
-      el.style.setProperty('display', 'none', 'important');
+      // No confirmed AI container above. Hide the element itself ONLY when it is
+      // positively AI-specific (a semantic AI marker). A weak rotated class hit
+      // inside an ordinary result card must never be hidden: that removes the
+      // organic card with it (measured on live Google All).
+      if (el.matches && el.matches(${JSON.stringify(HWB_AI_STRONG_SELECTORS)})) {
+        el.style.setProperty('display', 'none', 'important');
+      }
+    }
+
+    // ─── Is this href a real Google Search AI Mode URL? ───
+    // The substring alone is not enough: other Google properties accept a udm
+    // param, and a nav slot must never be hidden on a look-alike link.
+    function isAiModeHref(href) {
+      if (!href || href.indexOf('udm=50') === -1) return false;
+      var q = href.split('?')[0];
+      var path = q.indexOf('://') !== -1 ? q.substring(q.indexOf('/', q.indexOf('://') + 3)) : q;
+      return path.indexOf('/search') === 0;
+    }
+
+    // ─── Return true only for a nav slot that hosts nothing but AI Mode ───
+    // Live Google (Nov 2026) markup: the tab bar is
+    //   div[role='navigation'] > .GG4mbd > .Xk7zJc > ... > .beZ0tf[role='list']
+    //   > div[role='listitem']                     <-- the hideable slot
+    //   > div.olrp5b > a.XVMlrc.C6AK7c[href*='udm=50'] > ... > span "AI Mode"
+    // role='tab' and .hdtb-mitem match ZERO nodes today, so slot detection must
+    // be driven by the URL and validated structurally before hiding.
+    function isDedicatedAiSlot(slot) {
+      if (!slot || !slot.querySelectorAll) return false;
+      if (slot.id === 'search' || slot.id === 'main') return false;
+      if (slot.querySelectorAll('a h3').length) return false; // never an organic card
+      var links = slot.querySelectorAll('a[href]');
+      if (!links.length) return false;
+      var sawAi = false;
+      for (var k = 0; k < links.length; k++) {
+        if (!isAiModeHref(links[k].getAttribute('href'))) return false;
+        sawAi = true;
+      }
+      return sawAi;
+    }
+
+    function hideAiSlot(slot) {
+      if (!slot || !slot.style) return false;
+      slot.style.setProperty('display', 'none', 'important');
+      // Marker so the observer can skip re-renders inside an already-hidden slot.
+      try { slot.setAttribute('data-hwb-ai-slot', '1'); } catch (e) {}
+      return true;
     }
 
     // ─── Hide the whole AI Mode tab item (removes its slot, no blank gap) ───
     function hideAiTab(el) {
       if (!el || !el.style) return;
+      // Preferred path: walk up to the nearest nav list item that hosts only
+      // AI Mode links, and hide that exact slot (not the whole nav strip).
+      var slot = el;
+      var s = 0;
+      while (slot && slot !== document.body && s < 6) {
+        var sRole = slot.getAttribute ? slot.getAttribute('role') : null;
+        if (sRole === 'listitem') break;
+        slot = slot.parentElement;
+        s++;
+      }
+      if (slot && slot !== document.body && isDedicatedAiSlot(slot)) {
+        hideAiSlot(slot);
+        return;
+      }
+      // Legacy structure path (older Google templates).
       var cur = el;
       var i = 0;
       while (cur && cur !== document.body && i < 8) {
@@ -312,6 +393,8 @@ const GOOGLE_AI_HIDE_SCRIPT = `
             cur.style.setProperty('display', 'none', 'important');
             return;
           }
+          // Never climb past the nav list, or the whole tab strip disappears.
+          if (role === 'list' || role === 'navigation') return;
         }
         cur = cur.parentElement;
         i++;
@@ -319,7 +402,26 @@ const GOOGLE_AI_HIDE_SCRIPT = `
       el.style.setProperty('display', 'none', 'important');
     }
 
+    // ─── Post-navigation pass ───
+    // Run after every SPA navigation commit: Google rebuilds the tab strip on nav,
+    // so the AI Mode slot comes back. Scope is one narrow query on the nav strip
+    // only — never a document-wide scan.
+    function hwbAfterNav() {
+      try {
+        forceUdm14();
+      } catch (e) {}
+      try {
+        var nav = document.querySelector("[role='navigation']");
+        if (!nav || !nav.querySelectorAll) return;
+        var links = nav.querySelectorAll("a[href*='udm=50']");
+        for (var n = 0; n < links.length; n++) hideAiTab(links[n]);
+      } catch (e) {}
+    }
+
     // ─── Confirm an element sits inside a real AI container ───
+    // Semantic markers only. Weak rotated classes are deliberately excluded: they
+    // also appear on ordinary result cards, so "confirming" on them would let the
+    // text fallback hide an organic block.
     function findAiMarker(el) {
       var cur = el;
       var i = 0;
@@ -330,8 +432,7 @@ const GOOGLE_AI_HIDE_SCRIPT = `
           var ad = cur.getAttribute('data-attrid') || '';
           var ar = cur.getAttribute('data-rl') || '';
           var ac = cur.getAttribute('data-async-context') || '';
-          var cn = String(cur.className || '');
-          if (cur.id === 'm-x-content' || al === 'AI Overview' || ad === 'AI Overview' || ar === 'ai_overview' || ac.indexOf('ai_overview') !== -1 || cn.indexOf('Kevs9') !== -1 || cn.indexOf('SOVli') !== -1 || cn.indexOf('M8OgIe') !== -1 || cn.indexOf('I6TXqe') !== -1 || cn.indexOf('ULSxyf') !== -1) return cur;
+          if (cur.id === 'm-x-content' || al === 'AI Overview' || ad === 'AI Overview' || ar === 'ai_overview' || ac.indexOf('ai_overview') !== -1) return cur;
           if (cur.getAttribute('data-hveid')) return null;
         }
         cur = cur.parentElement;
@@ -340,26 +441,38 @@ const GOOGLE_AI_HIDE_SCRIPT = `
       return null;
     }
 
+    // ─── Route one candidate element to the correct hide path ───
+    function isElementNode(el) {
+      return !!el && typeof el === 'object' && !!el.querySelectorAll && !!el.getAttribute;
+    }
+
+    function handleAiElement(el) {
+      if (!isElementNode(el)) return;
+      var href = el.getAttribute('href') || '';
+      var isTab = String(el.tagName || '').toUpperCase() === 'A' && isAiModeHref(href);
+      var isTabEl = el.getAttribute('data-async-type') === 'ai_mode_entry' || el.getAttribute('data-name') === 'AI Mode' || el.getAttribute('jsname') === 'kEVIq' || el.getAttribute('jsname') === 'B6rgad' || String(el.className || '').indexOf('XqA0Kb') !== -1;
+      if (isTab || isTabEl) { hideAiTab(el); } else { hideAiBlock(el); }
+    }
+
     // ─── Main hide pass ───
     function hideAi(root) {
       if (!root || !root.querySelectorAll) return;
       try {
+        // A mutation may insert the AI nav link or its slot AS the added node, in
+        // which case querySelectorAll below would miss it (it only returns
+        // descendants).
+        if (root !== document.body) handleAiElement(root);
         var els = root.querySelectorAll(${JSON.stringify(GOOGLE_AI_SELECTORS)});
         for (var i = 0; i < els.length; i++) {
-          var el = els[i];
-          var isTab = el.tagName === 'A' && el.getAttribute('href') && el.getAttribute('href').indexOf('udm=50') !== -1;
-          var isTabEl = el.getAttribute('data-async-type') === 'ai_mode_entry' || el.getAttribute('data-name') === 'AI Mode' || el.getAttribute('jsname') === 'kEVIq' || el.getAttribute('jsname') === 'B6rgad' || String(el.className || '').indexOf('XqA0Kb') !== -1;
-          if (isTab || isTabEl) { hideAiTab(el); } else { hideAiBlock(el); }
+          handleAiElement(els[i]);
         }
-        // Text fallback: only for headings/nav items, only inside confirmed AI containers
-        var heads = root.querySelectorAll('h1,h2,h3,[role="tab"],.hdtb-mitem,[data-async-type]');
+        // Text fallback: headings only, and only inside confirmed AI containers.
+        var heads = root.querySelectorAll('h1,h2,h3');
         for (var j = 0; j < heads.length; j++) {
           var h = heads[j];
           var txt = (h.textContent || '').trim();
           if (/^AI\s*Overview/i.test(txt)) {
             if (findAiMarker(h)) hideAiBlock(h);
-          } else if (/^AI\s*Mode/i.test(txt)) {
-            hideAiTab(h);
           }
         }
       } catch(e2) {}
@@ -371,22 +484,53 @@ const GOOGLE_AI_HIDE_SCRIPT = `
     if (!window.__hwb_g_obs) {
       window.__hwb_g_obs = true;
       var t;
+      // Narrow re-check for the AI Mode nav slot. Scoped to the nav strip only:
+      // no document-wide scan.
+      function recheckAiSlot(anchor) {
+        if (!anchor || anchor.tagName !== 'A') return;
+        var href = anchor.getAttribute('href') || '';
+        if (href.indexOf('udm=50') === -1) return;
+        hideAiTab(anchor);
+      }
       new MutationObserver(function(ms) {
         clearTimeout(t);
         t = setTimeout(function() {
-          ms.forEach(function(m) {
-            m.addedNodes.forEach(function(n) {
-              if (n.nodeType === 1) hideAi(n);
-            });
-          });
+          for (var q = 0; q < ms.length; q++) {
+            var m = ms[q];
+            if (m.type === 'attributes') {
+              // Relabel / re-target of an existing nav link (no childList event).
+              recheckAiSlot(m.target);
+              continue;
+            }
+            for (var a = 0; a < m.addedNodes.length; a++) {
+              var n = m.addedNodes[a];
+              if (n.nodeType !== 1) continue;
+              // Ignore re-renders inside an already-hidden AI slot: nothing to do.
+              if (n.closest && n.closest('[data-hwb-ai-slot]')) continue;
+              hideAi(n);
+            }
+          }
         }, 50);
-      }).observe(document.body, { childList: true, subtree: true });
+      }).observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['href'],
+      });
     }
 
-    // Continuous monitoring for 5 seconds (10 × 500ms)
+    // Bounded late-render pass. The stylesheet already hides positively
+    // identified AI content the moment it paints, so this only re-checks the nav
+    // strip (single narrow query, never a document-wide scan).
     var intervalCount = 0;
     var interval = setInterval(function() {
-      try { hideAi(document.body); } catch(e) {}
+      try {
+        var nav = document.querySelector("[role='navigation']");
+        if (nav) {
+          var links = nav.querySelectorAll("a[href*='udm=50']");
+          for (var n = 0; n < links.length; n++) hideAiTab(links[n]);
+        }
+      } catch(e3) {}
       forceUdm14();
       if (++intervalCount >= 10) clearInterval(interval);
     }, 500);
