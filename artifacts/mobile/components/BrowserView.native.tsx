@@ -106,6 +106,17 @@ const GOOGLE_AI_BLOCK_RULES = [
   ".iVzeVc:has([data-attrid='VisualDigestGeneratedDescription'])",
 ].join(",");
 
+// Pre-paint nav rule. The AI Mode slot must be hidden by CSS, not by JS: the
+// injected script runs after first paint, which is exactly the millisecond flash
+// seen when opening a search or switching tabs. Measured on live Google (All,
+// Web, Images): this selector matches exactly ONE node — the AI Mode listitem —
+// and zero nodes containing an organic h3, across every mode tested. The
+// [href*='/search'] guard keeps look-alike udm=50 links on other Google
+// properties from hiding a real tab.
+const GOOGLE_AI_NAV_RULES = [
+  "[role='navigation'] [role='listitem']:has(a[href*='/search'][href*='udm=50'])",
+].join(",");
+
 // ─── DuckDuckGo AI element selectors ─────────────────────────────────────────
 const DDG_AI_SELECTORS = [
   // AI answer blocks in results
@@ -282,11 +293,28 @@ const GOOGLE_AI_HIDE_SCRIPT = `
     // ─── Strategy 2: CSS hide (backup) ───
     // Strong AI markers only. Weak obfuscated classes are never in the
     // stylesheet: they also match organic cards and related-search blocks.
-    if (!document.getElementById('hwb-ai-hide')) {
-      var s = document.createElement('style');
-      s.id = 'hwb-ai-hide';
-      s.textContent = ${JSON.stringify(HWB_AI_STRONG_SELECTORS + "," + GOOGLE_AI_BLOCK_RULES + "{display:none!important;}")};
-      (document.head || document.documentElement).appendChild(s);
+    // The nav rule is here so the AI Mode slot is hidden BEFORE first paint
+    // (this script runs at document start) and stays hidden across SPA tab
+    // switches without waiting for JS — that is what removes the flash.
+    function ensureAiStyle() {
+      try {
+        if (document.getElementById('hwb-ai-hide')) return true;
+        var host = document.head || document.documentElement;
+        if (!host) return false;
+        var s = document.createElement('style');
+        s.id = 'hwb-ai-hide';
+        s.textContent = ${JSON.stringify(HWB_AI_STRONG_SELECTORS + "," + GOOGLE_AI_BLOCK_RULES + "," + GOOGLE_AI_NAV_RULES + "{display:none!important;}")};
+        host.appendChild(s);
+        return true;
+      } catch (e) { return false; }
+    }
+    // At document start documentElement may not exist yet; retry once it does so
+    // the nav rule is in place before the tab strip paints.
+    if (!ensureAiStyle()) {
+      var styleTimer = setInterval(function() {
+        if (ensureAiStyle()) clearInterval(styleTimer);
+      }, 10);
+      setTimeout(function() { clearInterval(styleTimer); }, 2000);
     }
 
     // ─── Hide the smallest safe AI Overview container of an AI element ───
@@ -483,7 +511,6 @@ const GOOGLE_AI_HIDE_SCRIPT = `
     // Set up MutationObserver only once
     if (!window.__hwb_g_obs) {
       window.__hwb_g_obs = true;
-      var t;
       // Narrow re-check for the AI Mode nav slot. Scoped to the nav strip only:
       // no document-wide scan.
       function recheckAiSlot(anchor) {
@@ -493,24 +520,25 @@ const GOOGLE_AI_HIDE_SCRIPT = `
         hideAiTab(anchor);
       }
       new MutationObserver(function(ms) {
-        clearTimeout(t);
-        t = setTimeout(function() {
-          for (var q = 0; q < ms.length; q++) {
-            var m = ms[q];
-            if (m.type === 'attributes') {
-              // Relabel / re-target of an existing nav link (no childList event).
-              recheckAiSlot(m.target);
-              continue;
-            }
-            for (var a = 0; a < m.addedNodes.length; a++) {
-              var n = m.addedNodes[a];
-              if (n.nodeType !== 1) continue;
-              // Ignore re-renders inside an already-hidden AI slot: nothing to do.
-              if (n.closest && n.closest('[data-hwb-ai-slot]')) continue;
-              hideAi(n);
-            }
+        // Run synchronously: the CSS nav rule already keeps the slot hidden, but
+        // an inline style must be applied in the SAME frame a re-rendered slot is
+        // inserted. A 50ms debounce let a rebuilt slot paint for one frame — that
+        // was the visible flash on tab switches.
+        for (var q = 0; q < ms.length; q++) {
+          var m = ms[q];
+          if (m.type === 'attributes') {
+            // Relabel / re-target of an existing nav link (no childList event).
+            recheckAiSlot(m.target);
+            continue;
           }
-        }, 50);
+          for (var a = 0; a < m.addedNodes.length; a++) {
+            var n = m.addedNodes[a];
+            if (!n || n.nodeType !== 1) continue;
+            // Ignore re-renders inside an already-hidden AI slot: nothing to do.
+            if (n.closest && n.closest('[data-hwb-ai-slot]')) continue;
+            hideAi(n);
+          }
+        }
       }).observe(document.body, {
         childList: true,
         subtree: true,
