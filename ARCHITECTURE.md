@@ -52,6 +52,41 @@ Must NOT: - Rewrite URLs directly.
 Block AI using URL semantics only. Never hide AI using CSS or JavaScript
 DOM mutations.
 
+> **Implementation reality (locked).** The shipped engine is URL semantics
+> (address bar → `udm=14`, `udm=50` → `udm=14`) *plus* a narrowly scoped
+> DOM layer, because Google renders AI Overview inline and the AI Mode tab
+> inside the nav strip, neither of which URL semantics can remove. The DOM
+> layer is frozen and hash-guarded — see §5.1.
+
+### 5.1 AI-blocking lock (do not modify)
+
+The AI-blocking region of `BrowserView.native.tsx` (from the
+`Google AI element selectors` header through the closing of
+`YOUTUBE_AI_HIDE_SCRIPT`) is **frozen**. It is verified by hash on every
+`pnpm build`, `pnpm typecheck`, and `git commit`:
+
+```bash
+pnpm run verify:ai-lock     # node scripts/verify-ai-lock.js
+```
+
+Rules that must never regress:
+
+-   `data-hveid` is a **hard boundary**. Google wraps the AI Overview *and*
+    the organic results in one `data-hveid` container on multi-result queries,
+    so any `[data-hveid]:has(...)` hide rule deletes the whole results list.
+-   The stylesheet uses semantic AI markers only (`HWB_AI_STRONG_SELECTORS`).
+    Weak rotated classes (`.ULSxyf`, `.TQc1id`, `.M8OgIe`, `.Kevs9`, …) are
+    confirmation candidates, never CSS selectors.
+-   The AI Mode slot is hidden by CSS **before first paint**
+    (`GOOGLE_AI_NAV_RULES`), scoped to `[role='navigation']`, so it cannot
+    flash on tab switches.
+-   Never hide `#search`, `#main`, `#rso`, or pagination containers.
+
+To change this region deliberately: edit it, re-pin `EXPECTED_SHA256` in
+`scripts/verify-ai-lock.js` in its own commit, then re-run the DOM harness
+(87 assertions) and the live Google check. Work on incognito tabs, data
+sharing, or sessions must not touch it.
+
 ## 6. Error Handling
 
 Render website HTTP errors inside the browser. Only show native error UI

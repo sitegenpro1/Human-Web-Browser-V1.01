@@ -4,9 +4,10 @@
   "license": "MIT",
   "scripts": {
     "preinstall": "node -e \"try{require('fs').unlinkSync('package-lock.json')}catch(e){};try{require('fs').unlinkSync('yarn.lock')}catch(e){};if(!/^pnpm/.test(process.env.npm_config_user_agent||'')){console.error('Use pnpm instead');process.exit(1)}\"",
-    "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "verify:ai-lock": "node scripts/verify-ai-lock.js",
+    "build": "pnpm run verify:ai-lock && pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "pnpm run verify:ai-lock && pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
   "private": true,
   "devDependencies": {
