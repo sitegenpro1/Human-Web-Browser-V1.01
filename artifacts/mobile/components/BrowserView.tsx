@@ -45,6 +45,7 @@ type Props = {
   customUserAgent?: string;
   firewallCheck?: (url: string) => boolean;
   extraInjectedJS?: string;
+  isPrivate?: boolean;
 };
 
 // Web platform stub — real browsing runs on Android via react-native-webview.

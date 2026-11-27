@@ -87,26 +87,73 @@ To change this region deliberately: edit it, re-pin `EXPECTED_SHA256` in
 (87 assertions) and the live Google check. Work on incognito tabs, data
 sharing, or sessions must not touch it.
 
-## 6. Error Handling
+## 6. Private (Incognito) Session Isolation
+
+Incognito must not leak data in either direction. Skipping our own history array
+is not enough, because the WebView's storage is shared by the whole app: Google
+persists the last query in `localStorage` (`sb_wiz.pq`,
+`sb_wiz.zpc.gws-wiz-serp.`), so a private search appeared in the normal search
+box and vice versa.
+
+### 6.1 Why the `incognito` WebView prop is not used
+
+On Android, `react-native-webview` implements `incognito` by calling
+`CookieManager.getInstance().removeAllCookies(null)` — a **process-wide** wipe,
+not a per-WebView one (upstream issue #3988). Enabling it for a single private
+tab would silently log the user out of every normal tab, and it cannot be undone
+without a restart. The library exposes no per-WebView cookie profile or data
+directory on this stack, so native isolation does not exist here.
+
+### 6.2 What is used instead
+
+`PRIVATE_SESSION_SCRIPT` in `BrowserView.native.tsx` is injected through
+`injectedJavaScriptBeforeContentLoaded` ahead of the AI script when the tab is
+private, and re-injected on same-document navigation. It gives the document
+throwaway in-memory storage:
+
+-   `localStorage` / `sessionStorage` start empty and persist nothing.
+-   Reads and writes behave normally *within* the page (no throw), including
+    bracket access, `Object.keys()`, `for..in`, `in`, `delete` and
+    `Storage.prototype` calls — implemented with a `Proxy` so enumeration
+    matches real `Storage`.
+-   `indexedDB.open()` fails with a real `SecurityError` `DOMException` and a
+    request that supports both `onerror` and `addEventListener`.
+-   `document.cookie` is a per-document in-memory jar, so CSRF tokens set and
+    read back in JS still work, but normal-mode cookies are never visible and
+    nothing written survives the document.
+-   The Cache API resolves to an empty cache instead of rejecting, avoiding
+    unhandled rejections in pages that probe for it.
+
+The real on-disk data is never modified, so leaving private mode needs no
+re-download. Toggling the flag on a live WebView reloads once in either
+direction, because a document cannot be un-shielded in place.
+
+### 6.3 Invariants
+
+-   Never set `incognito` on the WebView.
+-   The shield must not alter the frozen AI region (§5.1) or its behaviour; the
+    two scripts are concatenated, private first.
+-   Normal mode must remain byte-for-byte unaffected when `isPrivate` is false.
+
+## 7. Error Handling
 
 Render website HTTP errors inside the browser. Only show native error UI
 for genuine WebView failures.
 
-## 7. Performance Rules
+## 8. Performance Rules
 
 -   Avoid WebView remounts.
 -   Avoid unnecessary reloads.
 -   Never create navigation loops.
 
-## 8. Regression Checklist
+## 9. Regression Checklist
 
 Before every merge verify: - Downloads - Tabs - History - Back/Forward -
 Images - News - Videos - Cookies - Permissions - External links - Search
-speed
+speed - Incognito isolation (both directions, §6)
 
-## 9. Future Features
+## 10. Future Features
 
--   Private browsing
 -   Reader mode
 -   Ad blocking
 -   Sync

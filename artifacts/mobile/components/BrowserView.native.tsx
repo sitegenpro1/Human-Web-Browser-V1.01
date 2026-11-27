@@ -46,6 +46,9 @@ type Props = {
   customUserAgent?: string;
   firewallCheck?: (url: string) => boolean;
   extraInjectedJS?: string;
+  // True for an incognito/private tab. Isolates the page's own storage so
+  // private data never reaches normal mode and vice versa.
+  isPrivate?: boolean;
 };
 
 const BLOCKED_SCHEMES = ["javascript:", "data:", "file:", "intent:", "vbscript:", "blob:"];
@@ -989,6 +992,271 @@ function isSensitivePage(url: string): boolean {
   return /accounts\.google\.|pay\.google\.|checkout\.|\/login|\/signin|\/password|\/auth/i.test(url);
 }
 
+// ─── Private (incognito) session isolation script ────────────────────────────
+// PROBLEM: WebView storage is shared by the whole app. Google persists the last
+// query in localStorage ("sb_wiz.pq", "sb_wiz.zpc.gws-wiz-serp."), so a private
+// search showed up in the normal search box and vice versa. Skipping our own
+// history array was never enough.
+//
+// WHY NOT the \`incognito\` WebView prop: on Android it calls
+// CookieManager.getInstance().removeAllCookies(null) — a PROCESS-WIDE wipe, not
+// a per-WebView one (react-native-webview issue #3988). Turning it on for one
+// private tab would silently log the user out of every normal tab. It also
+// cannot be undone for the normal WebView without a restart.
+//
+// WHAT THIS DOES instead: for the lifetime of a private WebView, replace the
+// page's own Storage APIs with throwaway in-memory copies. Private browsing can
+// then neither read data left by normal mode nor leave anything behind for it,
+// while pages still behave normally inside the private session.
+//   - localStorage / sessionStorage start empty and persist nothing
+//   - writes and reads work normally *within* the page (no throw, so sites that
+//     round-trip a value keep working), including bracket access, Object.keys(),
+//     for..in, \`in\`, delete and Storage.prototype calls
+//   - indexedDB open() fails with a real SecurityError request, so libraries
+//     that probe for it take their existing fallback path
+//   - document.cookie is a per-document in-memory jar: CSRF tokens set and read
+//     back in JS still work, but normal-mode cookies are never visible and
+//     nothing written here survives the document
+//   - the Cache API resolves to an empty cache instead of rejecting, which
+//     avoids unhandled rejections in pages that probe for it
+// The real data on disk is never touched: leaving private mode restores normal
+// behaviour on the next WebView mount, and nothing has to be re-downloaded.
+const PRIVATE_SESSION_SCRIPT = `
+(function() {
+  'use strict';
+  try {
+    if (window.__hwb_private_shield) return;
+    window.__hwb_private_shield = true;
+
+    function noop() {}
+
+    // ─── A drop-in storage that accepts writes and remembers nothing ───
+    function makeFakeStorage() {
+      var store = {};
+      var api = {
+        getItem: function(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+        setItem: function(k, v) { store[String(k)] = String(v); },
+        removeItem: function(k) { delete store[String(k)]; },
+        clear: function() { store = {}; },
+        key: function(i) { var ks = Object.keys(store); return i >= 0 && i < ks.length ? ks[i] : null; },
+      };
+      // Real Storage exposes entries as own enumerable properties too, so a
+      // page that does Object.keys(localStorage) or for..in must see stored
+      // keys — not the method names of this shim. Proxy mirrors that.
+      var shadow = {};
+      // configurable:true is required — a Proxy's ownKeys trap may only omit
+      // keys that the target itself could delete.
+      var methodNames = ['getItem', 'setItem', 'removeItem', 'clear', 'key'];
+      for (var mi = 0; mi < methodNames.length; mi++) {
+        Object.defineProperty(shadow, methodNames[mi], {
+          value: api[methodNames[mi]], configurable: true, enumerable: false, writable: true,
+        });
+      }
+      Object.defineProperty(shadow, 'length', { get: function() { return Object.keys(store).length; }, configurable: true });
+
+      if (typeof Proxy !== 'function') return shadow;
+
+      return new Proxy(shadow, {
+        get: function(target, prop) {
+          if (prop === 'length') return Object.keys(store).length;
+          if (prop === 'key') return api.key;
+          if (prop === 'getItem') return api.getItem;
+          if (prop === 'setItem') return api.setItem;
+          if (prop === 'removeItem') return api.removeItem;
+          if (prop === 'clear') return api.clear;
+          if (typeof prop === 'string' && Object.prototype.hasOwnProperty.call(store, prop)) return store[prop];
+          return target[prop];
+        },
+        set: function(target, prop, value) {
+          if (typeof prop === 'string') store[prop] = String(value);
+          return true;
+        },
+        has: function(target, prop) {
+          return typeof prop === 'string' && Object.prototype.hasOwnProperty.call(store, prop);
+        },
+        deleteProperty: function(target, prop) {
+          if (typeof prop === 'string') delete store[prop];
+          return true;
+        },
+        ownKeys: function() { return Object.keys(store); },
+        getOwnPropertyDescriptor: function(target, prop) {
+          if (typeof prop === 'string' && Object.prototype.hasOwnProperty.call(store, prop)) {
+            return { value: store[prop], enumerable: true, configurable: true, writable: true };
+          }
+          return undefined;
+        },
+      });
+    }
+
+    var fake = makeFakeStorage();
+    var fakeSession = makeFakeStorage();
+
+    // ─── Neutralise the prototype first, so every access path is covered ───
+    try {
+      var SP = window.Storage && window.Storage.prototype;
+      if (SP) {
+        SP.getItem = function() { return null; };
+        SP.setItem = noop;
+        SP.removeItem = noop;
+        SP.clear = noop;
+        SP.key = function() { return null; };
+        try {
+          Object.defineProperty(SP, 'length', { get: function() { return 0; }, configurable: true });
+        } catch (e) {}
+      }
+    } catch (e) {}
+
+    // ─── Replace the accessors so localStorage/sessionStorage are the fake ───
+    try {
+      Object.defineProperty(window, 'localStorage', { get: function() { return fake; }, configurable: true });
+    } catch (e) {}
+    try {
+      Object.defineProperty(window, 'sessionStorage', { get: function() { return fakeSession; }, configurable: true });
+    } catch (e) {}
+
+    // ─── indexedDB: fail like a real blocked request ───
+    // Sites commonly attach listeners with addEventListener and check
+    // readyState. A bare object with only .onerror looks broken and some
+    // libraries throw on it, so this mimics an IDBRequest that errors out.
+    try {
+      if (window.indexedDB) {
+        var makeFailedRequest = function(message) {
+          var listeners = { error: [], success: [] };
+          var fire = function(type) {
+            var evt = { target: req, type: type };
+            try {
+              var direct = req['on' + type];
+              if (typeof direct === 'function') direct.call(req, evt);
+            } catch (e) {}
+            var list = listeners[type] || [];
+            for (var i = 0; i < list.length; i++) {
+              try { list[i].call(req, evt); } catch (e) {}
+            }
+          };
+          var req = { onerror: null, onsuccess: null, onblocked: null, onupgradeneeded: null, error: null, result: null, readyState: 'pending' };
+          req.addEventListener = function(type, fn) {
+            if (!listeners[type]) listeners[type] = [];
+            listeners[type].push(fn);
+          };
+          req.removeEventListener = function(type, fn) {
+            var list = listeners[type] || [];
+            var at = list.indexOf(fn);
+            if (at !== -1) list.splice(at, 1);
+          };
+          setTimeout(function() {
+            req.readyState = 'done';
+            try {
+              req.error = (typeof DOMException === 'function')
+                ? new DOMException(message, 'SecurityError')
+                : { name: 'SecurityError', message: message };
+            } catch (e) {
+              req.error = { name: 'SecurityError', message: message };
+            }
+            fire('error');
+          }, 0);
+          return req;
+        };
+        window.indexedDB.open = function() {
+          return makeFailedRequest('IndexedDB is unavailable in private mode.');
+        };
+        window.indexedDB.deleteDatabase = function() {
+          var listeners = { success: [], error: [] };
+          var req = { onerror: null, onsuccess: null, error: null, readyState: 'pending' };
+          req.addEventListener = function(type, fn) {
+            if (!listeners[type]) listeners[type] = [];
+            listeners[type].push(fn);
+          };
+          req.removeEventListener = function(type, fn) {
+            var list = listeners[type] || [];
+            var at = list.indexOf(fn);
+            if (at !== -1) list.splice(at, 1);
+          };
+          setTimeout(function() {
+            req.readyState = 'done';
+            var evt = { target: req, type: 'success' };
+            try { if (typeof req.onsuccess === 'function') req.onsuccess(evt); } catch (e) {}
+            var list = listeners.success || [];
+            for (var i = 0; i < list.length; i++) {
+              try { list[i].call(req, evt); } catch (e) {}
+            }
+          }, 0);
+          return req;
+        };
+      }
+    } catch (e) {}
+
+    // ─── Cookies: private, in-memory jar ───
+    // The WebView cookie jar is shared app-wide, so a private page must not see
+    // cookies left by normal mode, and must not write any back. Returning ''
+    // for every read would break CSRF/session flows that set a cookie in JS and
+    // read it back, so this keeps a throwaway jar: reads and writes behave
+    // normally *within the page*, and nothing survives the document.
+    // Request headers still carry the real WebView jar, so pages keep loading;
+    // JS simply cannot observe normal-mode identity.
+    try {
+      var cookieDesc = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie');
+      if (cookieDesc && cookieDesc.get && cookieDesc.set) {
+        var jar = {};
+        Object.defineProperty(document, 'cookie', {
+          get: function() {
+            var parts = [];
+            for (var k in jar) {
+              if (Object.prototype.hasOwnProperty.call(jar, k)) parts.push(k + '=' + jar[k]);
+            }
+            return parts.join('; ');
+          },
+          set: function(raw) {
+            try {
+              var str = String(raw);
+              var first = str.split(';')[0];
+              var eq = first.indexOf('=');
+              if (eq < 1) return;
+              var name = first.slice(0, eq).trim();
+              var value = first.slice(eq + 1).trim();
+              if (!name) return;
+              // Expiry in the past, or Max-Age<=0, means "delete".
+              var dead = /;\s*max-age\s*=\s*0+\s*(;|$)/i.test(str) ||
+                         /;\s*max-age\s*=\s*-/i.test(str);
+              if (!dead) {
+                var exp = /;\s*expires\s*=\s*([^;]+)/i.exec(str);
+                if (exp) {
+                  var when = Date.parse(exp[1]);
+                  if (!isNaN(when) && when <= Date.now()) dead = true;
+                }
+              }
+              if (dead) { delete jar[name]; } else { jar[name] = value; }
+            } catch (e) {}
+          },
+          configurable: true,
+        });
+      }
+    } catch (e) {}
+
+    // ─── caches API: resolve to an empty, harmless cache ───
+    // Rejecting would surface as unhandled promise rejections inside pages that
+    // probe for it, so this hands back an empty cache instead of an error.
+    try {
+      if (window.caches) {
+        var emptyCache = {
+          match: function() { return Promise.resolve(undefined); },
+          matchAll: function() { return Promise.resolve([]); },
+          put: function() { return Promise.resolve(); },
+          add: function() { return Promise.resolve(); },
+          addAll: function() { return Promise.resolve(); },
+          delete: function() { return Promise.resolve(false); },
+          keys: function() { return Promise.resolve([]); },
+        };
+        window.caches.open = function() { return Promise.resolve(emptyCache); };
+        window.caches.match = function() { return Promise.resolve(undefined); };
+        window.caches.keys = function() { return Promise.resolve([]); };
+        window.caches.delete = function() { return Promise.resolve(false); };
+      }
+    } catch (e) {}
+  } catch (e) {}
+})();
+true;
+`;
+
 // ─── BrowserView component ────────────────────────────────────────────────────
 export const BrowserView = forwardRef<BrowserViewHandle, Props>((props, ref) => {
   const {
@@ -1007,6 +1275,7 @@ export const BrowserView = forwardRef<BrowserViewHandle, Props>((props, ref) => 
     customUserAgent,
     firewallCheck,
     extraInjectedJS,
+    isPrivate,
     onLoadStart,
     onLoadEnd,
     onLoadProgress,
@@ -1033,6 +1302,8 @@ export const BrowserView = forwardRef<BrowserViewHandle, Props>((props, ref) => 
   const prevSourceUrlRef = useRef(url);
   const forceDarkModeRef = useRef(forceDarkMode);
   forceDarkModeRef.current = forceDarkMode;
+  const isPrivateRef = useRef(isPrivate);
+  isPrivateRef.current = isPrivate;
 
   useEffect(() => {
     if (prevSourceUrlRef.current !== url) {
@@ -1041,6 +1312,29 @@ export const BrowserView = forwardRef<BrowserViewHandle, Props>((props, ref) => 
       setErrorInfo(null);
     }
   }, [url]);
+
+  // Re-apply / lift the private shield when the flag flips on the SAME mounted
+  // WebView. injectedJavaScriptBeforeContentLoaded only runs for a fresh
+  // document, so toggling private mode without navigating would otherwise leave
+  // the page shielded while the UI says "Normal", or unshielded while the UI
+  // says "Private". A reload is the only reliable way to change the document's
+  // starting state in either direction.
+  const prevPrivateRef = useRef(isPrivate);
+  useEffect(() => {
+    if (prevPrivateRef.current === isPrivate) return;
+    prevPrivateRef.current = isPrivate;
+    if (isPrivate) {
+      // Shield immediately (covers the reload window), then reload so the
+      // document is shielded from its very first script — a live page may
+      // already hold a reference to the real storage objects.
+      try { webViewRef.current?.injectJavaScript(PRIVATE_SESSION_SCRIPT); } catch {}
+      try { webViewRef.current?.reload(); } catch {}
+    } else if (typeof webViewRef.current?.reload === "function") {
+      // Leaving private mode: the shield cannot be undone in place, so reload
+      // to get a clean document that runs without it.
+      try { webViewRef.current.reload(); } catch {}
+    }
+  }, [isPrivate]);
 
   useImperativeHandle(ref, () => ({
     goBack: () => webViewRef.current?.goBack(),
@@ -1118,6 +1412,13 @@ function handleNavChange(state: WebViewNavigation) {
     // This keeps the history.pushState override alive when Google navigates internally
     if (state.url && isGoogleSearch(state.url) && !isSensitivePage(state.url)) {
       webViewRef.current?.injectJavaScript(GOOGLE_AI_HIDE_SCRIPT);
+    }
+
+    // Keep the private shield alive across same-document navigations. The
+    // injected-before-content pass only covers the initial document; a client
+    // router can replace the globals later in the session.
+    if (isPrivateRef.current) {
+      webViewRef.current?.injectJavaScript(PRIVATE_SESSION_SCRIPT);
     }
 
     // Re-inject dark mode immediately on SPA navigation (before full load fires)
@@ -1257,7 +1558,11 @@ function handleNavChange(state: WebViewNavigation) {
       allowsInlineMediaPlayback
       mediaPlaybackRequiresUserAction={false}
       injectedJavaScriptBeforeContentLoaded={
-        isGoogleSearch(url) && !isSensitivePage(url) ? GOOGLE_AI_HIDE_SCRIPT : undefined
+        // Private shield goes first and unconditionally: it must be in place
+        // before the page's own scripts touch storage. It is NOT part of the
+        // frozen AI region.
+        (isPrivate ? PRIVATE_SESSION_SCRIPT : "") +
+        (isGoogleSearch(url) && !isSensitivePage(url) ? GOOGLE_AI_HIDE_SCRIPT : "")
       }
       onNavigationStateChange={handleNavChange}
       onLoadStart={onLoadStart}
@@ -1288,7 +1593,8 @@ function handleNavChange(state: WebViewNavigation) {
       style={styles.webview}
       contentInsetAdjustmentBehavior="never"
       automaticallyAdjustContentInsets={false}
-      cacheEnabled
+      cacheEnabled={!isPrivate}
+      cacheMode={isPrivate ? "LOAD_NO_CACHE" : "LOAD_DEFAULT"}
       nestedScrollEnabled
       overScrollMode="never"
       directionalLockEnabled

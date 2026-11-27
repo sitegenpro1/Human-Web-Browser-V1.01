@@ -1630,6 +1630,7 @@ function handleNavigationRequest(url: string) {
             firewallCheck={firewallEnabled ? firewallShouldBlock : undefined}
             customUserAgent={getEffectiveUA()}
             extraInjectedJS={getInjectedJS(activeUrl)}
+            isPrivate={isPrivateSession}
           />
         </View>
       )}
